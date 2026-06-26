@@ -78,6 +78,7 @@ Translate the music in your head into genuinely *good* output. Two grounding for
 - **Tech stack**: Rust + Python + TypeScript/React per PRD — let each language do what its ecosystem wins; clean boundary between them.
 - **Token budget**: metered agent paths draw on a capped credit pool with overflow disabled. Skill + CLI + externalized queryable graph keep context near-empty by construction; audio/feature dumps run file-to-file and never enter context.
 - **Compute**: M0 runs comfortably on CPU; generation and stem separation (M1) want a GPU — budget a rented/hosted worker.
+- **Dev machine**: ~4GB RAM, no Docker — verification must be RAM-safe (SQLite / stubs / fixtures). A live Postgres server, the heavy ML stack, live YouTube ingestion, and cloud (S3/R2) storage are built here but verified in the user's real environment. See `.planning/ENVIRONMENT.md`.
 - **Licensing**: research/non-commercial generator licenses (e.g. MusicGen) are fine for personal/portfolio; commercial output would require swapping to a clear-licensed generator.
 - **Solo build**: scope must stay buildable and maintainable by one person, local-first.
 
