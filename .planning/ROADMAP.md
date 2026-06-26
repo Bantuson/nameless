@@ -36,7 +36,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Raw audio is stored immutably in object storage (S3/R2) addressed by ID and is never echoed into CLI output — compact-by-default means IDs and summaries only, never waveforms or feature arrays.
   3. The typed Rust state machine makes it impossible to place a fragment that has not reached `analyzed`; the block is enforced by the harness, not by convention.
   4. Feature-extraction and separation work is enqueued on a durable Postgres-backed job queue (sqlxmq) that survives restart, retries on failure, and applies backpressure — no NATS/Redis.
-**Plans**: TBD
+**Plans**: 4 plans (waves 1→2→3→4)
+- [ ] 01-01-PLAN.md — Walking Skeleton: cargo workspace + ports-and-adapters + `nameless --local` capture→store(content-hash)→list end-to-end, no Postgres [CAP-01, CAP-02, CAP-06]
+- [ ] 01-02-PLAN.md — Complete typed fragment lifecycle + exhaustive transition tests ("cannot place unanalyzed") [CAP-05]
+- [ ] 01-03-PLAN.md — Durable job-queue seam: JobQueue trait + JobEnvelope + in-memory retry/backpressure + enqueue-on-capture [CAP-07]
+- [ ] 01-04-PLAN.md — Production adapters behind a `postgres` feature: Postgres repo + sqlxmq + S3/R2 + migrations (env-gated) [CAP-02, CAP-07]
 
 ### Phase 2: Fragment Analysis
 **Goal**: A captured fragment becomes `analyzed` — carrying key/tempo/features and embeddings — and is retrievable by audio similarity or by note text.
@@ -141,7 +145,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Typed Capture Spine | 0/TBD | Not started | - |
+| 1. Typed Capture Spine | 0/4 | Not started | - |
 | 2. Fragment Analysis | 0/TBD | Not started | - |
 | 3. Tutorial Ingestion + Snapshot Corpus | 0/TBD | Not started | - |
 | 4. Cited Claim Mining + Cross-Reference | 0/TBD | Not started | - |
