@@ -95,13 +95,43 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be filled by roadmap) | — | Pending |
+| CAP-01 | Phase 1 | Pending |
+| CAP-02 | Phase 1 | Pending |
+| CAP-05 | Phase 1 | Pending |
+| CAP-06 | Phase 1 | Pending |
+| CAP-07 | Phase 1 | Pending |
+| CAP-03 | Phase 2 | Pending |
+| CAP-04 | Phase 2 | Pending |
+| KNOW-01 | Phase 3 | Pending |
+| KNOW-02 | Phase 3 | Pending |
+| KNOW-03 | Phase 3 | Pending |
+| KNOW-04 | Phase 3 | Pending |
+| KNOW-05 | Phase 4 | Pending |
+| KNOW-06 | Phase 4 | Pending |
+| KNOW-07 | Phase 5 | Pending |
+| KNOW-08 | Phase 5 | Pending |
+| KNOW-09 | Phase 5 | Pending |
+| KNOW-11 | Phase 5 | Pending |
+| KNOW-10 | Phase 6 | Pending |
+| REF-01 | Phase 7 | Pending |
+| REF-02 | Phase 7 | Pending |
+| REF-03 | Phase 7 | Pending |
+| REF-04 | Phase 7 | Pending |
+| SAMP-01 | Phase 8 | Pending |
+| SAMP-02 | Phase 8 | Pending |
+| SAMP-03 | Phase 8 | Pending |
+| SAMP-04 | Phase 8 | Pending |
+| SAMP-05 | Phase 8 | Pending |
+| UI-01 | Phase 9 | Pending |
+| UI-02 | Phase 9 | Pending |
+| UI-03 | Phase 9 | Pending |
+| UI-04 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 30 total
-- Mapped to phases: 0 (pre-roadmap)
-- Unmapped: 30 ⚠️ (roadmap will resolve)
+- v1 requirements: 31 total (KNOW ×11, CAP ×7, REF ×4, SAMP ×5, UI ×4 — the prior "30" header undercounted KNOW by one)
+- Mapped to phases: 31 (100%) ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-26*
-*Last updated: 2026-06-26 after initial definition*
+*Last updated: 2026-06-26 after roadmap creation (traceability mapped to 9 M0 phases)*
