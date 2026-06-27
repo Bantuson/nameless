@@ -2,11 +2,11 @@
 //!
 //! ## Compile-time-checked SQL
 //!
-//! Queries use sqlx's `query!`/`query_as!` macros: the SQL is verified against the live schema at
-//! COMPILE time (parameterized — no string-built SQL, so injection is structurally impossible,
-//! T-04-02). That means building with `--features postgres` needs either `DATABASE_URL` pointing
-//! at a migrated database, or an offline cache (`cargo sqlx prepare` + `SQLX_OFFLINE=true`). The
-//! README documents both paths.
+//! Queries use sqlx's `query!` macro: the SQL is verified against the live schema at COMPILE time
+//! (parameterized — no string-built SQL, so injection is structurally impossible, T-04-02). That
+//! means building with `--features postgres` needs either `DATABASE_URL` pointing at a migrated
+//! database, or an offline cache (`cargo sqlx prepare` + `SQLX_OFFLINE=true`). The README documents
+//! both paths.
 //!
 //! ## Sync trait over an async driver (the blocking shim)
 //!
@@ -19,8 +19,10 @@
 //! ## Enum mapping without polluting the core
 //!
 //! The core `Provenance`/`FragmentState` enums deliberately do NOT derive `sqlx::Type` (that would
-//! drag sqlx into the lean default build). Instead this module defines thin `Pg*` mirror enums
-//! that DO derive `sqlx::Type` against the Postgres enum types, and converts at the boundary.
+//! drag sqlx into the lean default build). Instead we map through their canonical snake_case
+//! labels: on write we bind the `&str` label and cast `text → enum` in SQL (`$n::text::provenance`);
+//! on read we project the enum back to text (`provenance::text`) and parse with `from_db_str`. The
+//! cast is still fully compile-time-checked against the schema.
 
 use std::sync::Arc;
 
@@ -32,94 +34,6 @@ use nameless_core::fragment::{Fragment, FragmentId, FragmentKind, Project, Proje
 use nameless_core::ports::FragmentRepo;
 use nameless_core::provenance::Provenance;
 use nameless_core::state_machine::FragmentState;
-
-/// Postgres-side mirror of [`Provenance`] (maps to the `provenance` enum type).
-#[derive(Debug, Clone, Copy, sqlx::Type)]
-#[sqlx(type_name = "provenance", rename_all = "snake_case")]
-enum PgProvenance {
-    HumanRecorded,
-    AiGenerated,
-    Derived,
-    Sampled,
-}
-
-impl From<Provenance> for PgProvenance {
-    fn from(p: Provenance) -> Self {
-        match p {
-            Provenance::HumanRecorded => PgProvenance::HumanRecorded,
-            Provenance::AiGenerated => PgProvenance::AiGenerated,
-            Provenance::Derived => PgProvenance::Derived,
-            Provenance::Sampled => PgProvenance::Sampled,
-        }
-    }
-}
-
-impl From<PgProvenance> for Provenance {
-    fn from(p: PgProvenance) -> Self {
-        match p {
-            PgProvenance::HumanRecorded => Provenance::HumanRecorded,
-            PgProvenance::AiGenerated => Provenance::AiGenerated,
-            PgProvenance::Derived => Provenance::Derived,
-            PgProvenance::Sampled => Provenance::Sampled,
-        }
-    }
-}
-
-/// Postgres-side mirror of [`FragmentState`] (maps to the `fragment_state` enum type).
-#[derive(Debug, Clone, Copy, sqlx::Type)]
-#[sqlx(type_name = "fragment_state", rename_all = "snake_case")]
-enum PgFragmentState {
-    Captured,
-    Analyzing,
-    Analyzed,
-    Placed,
-    Mixed,
-    Rendered,
-    Requested,
-    Generating,
-    Generated,
-    Evaluating,
-    Promoted,
-    Rejected,
-}
-
-impl From<FragmentState> for PgFragmentState {
-    fn from(s: FragmentState) -> Self {
-        match s {
-            FragmentState::Captured => PgFragmentState::Captured,
-            FragmentState::Analyzing => PgFragmentState::Analyzing,
-            FragmentState::Analyzed => PgFragmentState::Analyzed,
-            FragmentState::Placed => PgFragmentState::Placed,
-            FragmentState::Mixed => PgFragmentState::Mixed,
-            FragmentState::Rendered => PgFragmentState::Rendered,
-            FragmentState::Requested => PgFragmentState::Requested,
-            FragmentState::Generating => PgFragmentState::Generating,
-            FragmentState::Generated => PgFragmentState::Generated,
-            FragmentState::Evaluating => PgFragmentState::Evaluating,
-            FragmentState::Promoted => PgFragmentState::Promoted,
-            FragmentState::Rejected => PgFragmentState::Rejected,
-        }
-    }
-}
-
-impl From<PgFragmentState> for FragmentState {
-    fn from(s: PgFragmentState) -> Self {
-        match s {
-            PgFragmentState::Captured => FragmentState::Captured,
-            PgFragmentState::Analyzing => FragmentState::Analyzing,
-            PgFragmentState::Analyzed => FragmentState::Analyzed,
-            PgFragmentState::Placed => FragmentState::Placed,
-            PgFragmentState::Mixed => FragmentState::Mixed,
-            PgFragmentState::Rendered => FragmentState::Rendered,
-            PgFragmentState::Requested => FragmentState::Requested,
-            PgFragmentState::Generating => FragmentState::Generating,
-            PgFragmentState::Generated => FragmentState::Generated,
-            PgFragmentState::Evaluating => FragmentState::Evaluating,
-            PgFragmentState::Promoted => FragmentState::Promoted,
-            PgFragmentState::Rejected => FragmentState::Rejected,
-        }
-    }
-}
 
 /// A [`FragmentRepo`] backed by Postgres.
 pub struct PostgresFragmentRepo {
@@ -153,32 +67,38 @@ impl PostgresFragmentRepo {
         Arc::clone(&self.rt)
     }
 
-    /// Reassemble a domain [`Fragment`] from raw row columns.
+    /// Reassemble a domain [`Fragment`] from raw row columns (enum labels arrive as text).
+    #[allow(clippy::too_many_arguments)]
     fn row_to_fragment(
         id: uuid::Uuid,
         project_id: uuid::Uuid,
         kind: String,
-        provenance: PgProvenance,
+        provenance: String,
         audio_uri: String,
         duration_ms: Option<i32>,
         sample_rate: Option<i32>,
         note_text: String,
-        state: PgFragmentState,
+        state: String,
         parent_fragment_id: Option<uuid::Uuid>,
         created_at_ms: i64,
     ) -> Result<Fragment, RepoError> {
         let kind = FragmentKind::from_db_str(&kind)
             .ok_or_else(|| RepoError::Serialization(format!("unknown fragment kind: {kind}")))?;
+        let provenance = Provenance::from_db_str(&provenance).ok_or_else(|| {
+            RepoError::Serialization(format!("unknown provenance: {provenance}"))
+        })?;
+        let state = FragmentState::from_db_str(&state)
+            .ok_or_else(|| RepoError::Serialization(format!("unknown fragment state: {state}")))?;
         Ok(Fragment {
             id: FragmentId(id),
             project_id: ProjectId(project_id),
             kind,
-            provenance: provenance.into(),
+            provenance,
             audio_uri,
             duration_ms: duration_ms.map(|v| v as u32),
             sample_rate: sample_rate.map(|v| v as u32),
             note_text,
-            state: state.into(),
+            state,
             parent_fragment_id: parent_fragment_id.map(FragmentId),
             created_at_ms,
         })
@@ -203,6 +123,14 @@ impl FragmentRepo for PostgresFragmentRepo {
     }
 
     fn insert_fragment(&self, f: &Fragment) -> Result<(), RepoError> {
+        // Bind enum labels as text and cast text→enum in SQL (compile-time-checked, injection-safe).
+        let provenance = f.provenance.as_str();
+        let state = f.state.as_str();
+        let kind = f.kind.as_str();
+        let duration = f.duration_ms.map(|v| v as i32);
+        let sample_rate = f.sample_rate.map(|v| v as i32);
+        let parent = f.parent_fragment_id.map(|p| p.0);
+
         self.rt
             .block_on(async {
                 sqlx::query!(
@@ -210,18 +138,20 @@ impl FragmentRepo for PostgresFragmentRepo {
                     insert into fragments
                         (id, project_id, kind, provenance, audio_uri, duration_ms, sample_rate,
                          note_text, state, parent_fragment_id, created_at_ms)
-                    values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    values
+                        ($1, $2, $3, $4::text::provenance, $5, $6, $7, $8,
+                         $9::text::fragment_state, $10, $11)
                     "#,
                     f.id.0,
                     f.project_id.0,
-                    f.kind.as_str(),
-                    PgProvenance::from(f.provenance) as PgProvenance,
+                    kind,
+                    provenance,
                     f.audio_uri,
-                    f.duration_ms.map(|v| v as i32),
-                    f.sample_rate.map(|v| v as i32),
+                    duration,
+                    sample_rate,
                     f.note_text,
-                    PgFragmentState::from(f.state) as PgFragmentState,
-                    f.parent_fragment_id.map(|p| p.0),
+                    state,
+                    parent,
                     f.created_at_ms,
                 )
                 .execute(&self.pool)
@@ -244,12 +174,12 @@ impl FragmentRepo for PostgresFragmentRepo {
                         id,
                         project_id,
                         kind,
-                        provenance as "provenance: PgProvenance",
+                        provenance::text as "provenance!",
                         audio_uri,
                         duration_ms,
                         sample_rate,
                         note_text,
-                        state as "state: PgFragmentState",
+                        state::text as "state!",
                         parent_fragment_id,
                         created_at_ms
                     from fragments
@@ -292,12 +222,12 @@ impl FragmentRepo for PostgresFragmentRepo {
                         id,
                         project_id,
                         kind,
-                        provenance as "provenance: PgProvenance",
+                        provenance::text as "provenance!",
                         audio_uri,
                         duration_ms,
                         sample_rate,
                         note_text,
-                        state as "state: PgFragmentState",
+                        state::text as "state!",
                         parent_fragment_id,
                         created_at_ms
                     from fragments
