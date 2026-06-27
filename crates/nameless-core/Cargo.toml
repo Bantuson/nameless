@@ -1,0 +1,15 @@
+[package]
+name = "nameless-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Nameless control-plane domain: fragments, the typed lifecycle state machine, ports, and the job-queue contract. Pure logic, no heavy deps."
+
+[dependencies]
+serde.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

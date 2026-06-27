@@ -1,0 +1,6 @@
+# Pin the toolchain so every machine builds the same control plane.
+# The dev machine (~4GB, no Rust toolchain) cannot compile this; once `rustup` is installed
+# it will fetch this channel automatically.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

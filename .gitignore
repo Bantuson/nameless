@@ -1,0 +1,12 @@
+# Rust build output
+/target
+**/*.rs.bk
+*.swp
+
+# Local `--local` profile store (filesystem object store + JSON fragment db)
+.nameless-local/
+
+# Secrets — only .env.example is committed
+.env
+
+# sqlx offline query cache is committed deliberately when present; ignore editor cruft only

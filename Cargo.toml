@@ -1,0 +1,48 @@
+# Nameless control plane — Cargo workspace.
+#
+# Three crates, intentionally layered so the *default* build stays lean enough to
+# compile and run within ~4GB RAM with no Postgres/Docker (see .planning/ENVIRONMENT.md):
+#
+#   nameless-core      pure domain — fragments, the typed state machine, ports (traits),
+#                      typed errors, the job-queue contract. NO async/DB/heavy deps, ever.
+#   nameless-adapters  concrete adapters behind the core ports. The DEFAULT feature set is
+#                      pure-Rust (filesystem object store, in-memory + file repos, symphonia
+#                      probe, in-memory queue). The heavy production leaf (tokio + sqlx +
+#                      sqlxmq + S3 client) lives behind a NON-DEFAULT `postgres` feature.
+#   nameless-cli       the `nameless` binary. Default build wires only the `--local` profile
+#                      (filesystem + in-memory adapters); the Postgres/S3 server profile is
+#                      behind the `postgres` feature so the lean binary still builds.
+#
+# This layout is the single decision that makes RAM-safe verification honest: prod (S3/R2,
+# Postgres, sqlxmq) and the local fake satisfy the SAME trait, so local tests exercise real
+# control flow with only the heavy leaf swapped.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/nameless-core",
+    "crates/nameless-adapters",
+    "crates/nameless-cli",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+rust-version = "1.75"
+
+# Shared dependency versions. Pin sensible current (2026) versions; the user must verify
+# crate legitimacy on crates.io before the first `cargo build` (see README "Supply chain").
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
+clap = { version = "4", features = ["derive"] }
+# symphonia: pure-Rust audio decode/probe (no ffmpeg/native dep) — keeps the 4GB box buildable.
+symphonia = { version = "0.5", features = ["wav", "mp3", "flac", "isomp4", "aac", "pcm"] }
+# Heavy leaf — ONLY pulled in by the `postgres` feature of nameless-adapters.
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "macros"] }
+sqlxmq = "0.5"
+rust-s3 = "0.35"
