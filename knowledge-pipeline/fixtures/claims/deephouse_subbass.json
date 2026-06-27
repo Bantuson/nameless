@@ -1,0 +1,17 @@
+{
+  "transcript": {
+    "video_id": "deephouse_subbass",
+    "caption_source": "manual",
+    "genre": ["deep-house"],
+    "segments": [
+      {"start_s": 8.0, "duration_s": 6.0, "text": "Roll off the low end of the sub bass around 30 hz to keep the bottom tight."},
+      {"start_s": 15.0, "duration_s": 6.0, "text": "Keep the sub in mono below 120 hz so it stays centered and punchy."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "High-pass the sub bass around 30 Hz to keep the low end tight.",
+     "technique": "sub-bass-highpass", "stage": "bassline", "genre": ["deep-house"], "confidence": 0.9},
+    {"segment": 1, "claim_text": "Keep the sub bass in mono below 120 Hz.",
+     "technique": "sub-bass-mono", "stage": "bassline", "genre": ["deep-house"], "confidence": 0.8}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "transcript": {
+    "video_id": "amapiano_subbass",
+    "caption_source": "manual",
+    "genre": ["amapiano"],
+    "segments": [
+      {"start_s": 12.0, "duration_s": 6.0, "text": "I high-pass the sub bass at about 30 hz so the log drum has room underneath."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "High-pass the sub bass around 30 Hz to leave room for the log drum.",
+     "technique": "sub-bass-highpass", "stage": "bassline", "genre": ["amapiano"], "confidence": 0.9}
+  ]
+}

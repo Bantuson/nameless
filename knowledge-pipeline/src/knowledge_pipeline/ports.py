@@ -24,6 +24,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Iterable, Optional, Protocol, runtime_checkable
 
+from .domain.claims import Claim, ClaimCluster, ClaimStats
 from .domain.models import (
     CaptionFetch,
     CorpusEntry,
@@ -142,12 +143,99 @@ class RateLimiter(Protocol):
     def acquire(self) -> None: ...
 
 
-# Convenience: the set of network-ish ports a live ingest needs, documented in one place.
+# ============================================================================================
+# Phase-4 ports — claim mining + cross-reference (KNOW-05/06). Same ports-and-adapters discipline:
+# each has a REAL adapter (heavy import LAZY) AND a deterministic FAKE, and MiningPipeline depends only
+# on these protocols. The Anthropic call is the heavy/external leaf (key + tokens) => env-gated.
+# ============================================================================================
+
+
+@runtime_checkable
+class ClaimExtractor(Protocol):
+    """Extract atomic, individually-cited claims from one transcript (KNOW-05).
+
+    The real adapter is Claude (Anthropic SDK) with **structured tool-use** (``emit_claims``, forced
+    ``tool_choice``) — reliable LLM output comes from structure, not prose; the SDK import is LAZY and the
+    call is env-gated (``ANTHROPIC_API_KEY`` + tokens). The fake is a deterministic, rule-based extractor
+    over the producer-jargon lexicon, so the whole mining flow runs in tests with no API.
+
+    ``genres`` is the discovery-provenance context (the grid/anchor genre that surfaced the video); it
+    seeds a claim's ``genre`` only when the source itself does not tie the claim to a genre. The extractor
+    must never invent numbers or synthesize — it emits cited atoms only.
+    """
+
+    def extract(self, transcript: RawTranscript, *, genres: Iterable[str] = ()) -> list[Claim]: ...
+
+
+@runtime_checkable
+class SimilarityIndex(Protocol):
+    """Optional text-similarity (0..1) for semantic dedup refinement (KNOW-06).
+
+    Real = embeddings (cosine); fake = keyword/Jaccard. The pure cross-reference + default dedup do NOT
+    require it (they use deterministic topic keys + exact text) — semantic similarity is a pluggable
+    refinement so the core stays testable. Whatever the impl, it only ever collapses SAME-source
+    near-paraphrases; it never merges across sources (that would fabricate/erase corroboration).
+    """
+
+    def similarity(self, a: str, b: str) -> float: ...
+
+
+@runtime_checkable
+class ClaimStore(Protocol):
+    """Persist + query claims and clusters (KNOW-05/06). Real = sqlite (extends registry); fake = in-memory.
+
+    ``upsert_claims`` is idempotent on the content-addressed claim id; ``replace_clusters`` rewrites the
+    cluster set wholesale (clusters are a pure function of ALL claims, so they are recomputed globally
+    after every mine and replaced, never accreted). ``get_claim`` powers ``claims show <id>`` (trace a
+    claim back to its source quote + timestamp + video).
+    """
+
+    def init_schema(self) -> None: ...
+
+    def upsert_claims(self, claims: Iterable[Claim], *, verified: Optional[dict[str, bool]] = None) -> int:
+        """Insert/replace claims by id; ``verified`` maps claim id -> citation-verification result."""
+        ...
+
+    def replace_clusters(self, clusters: Iterable[ClaimCluster]) -> int:
+        """Clear and rewrite all clusters + members (clusters are global over the full claim set)."""
+        ...
+
+    def get_claim(self, claim_id: str) -> Optional[Claim]: ...
+
+    def list_claims(
+        self,
+        *,
+        stage: Optional[str] = None,
+        genre: Optional[str] = None,
+        technique: Optional[str] = None,
+        source_video_id: Optional[str] = None,
+        min_confidence: Optional[float] = None,
+    ) -> list[Claim]: ...
+
+    def get_cluster(self, topic: str) -> Optional[ClaimCluster]: ...
+
+    def list_clusters(
+        self,
+        *,
+        contested_only: bool = False,
+        stage: Optional[str] = None,
+        genre: Optional[str] = None,
+    ) -> list[ClaimCluster]: ...
+
+    def stats(self) -> ClaimStats: ...
+
+
+# Convenience: the ports each plane needs, documented in one place.
 __all__ = [
+    # Phase 3 — ingestion
     "DiscoverySource",
     "TranscriptFetcher",
     "Transcriber",
     "CorpusStore",
     "Clock",
     "RateLimiter",
+    # Phase 4 — claim mining
+    "ClaimExtractor",
+    "SimilarityIndex",
+    "ClaimStore",
 ]

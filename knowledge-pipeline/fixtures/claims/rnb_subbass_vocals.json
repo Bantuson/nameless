@@ -1,0 +1,17 @@
+{
+  "transcript": {
+    "video_id": "rnb_subbass_vocals",
+    "caption_source": "asr",
+    "genre": ["rnb"],
+    "segments": [
+      {"start_s": 5.0, "duration_s": 6.0, "text": "On the sub I high-pass around 30 hz so it does not muddy the kick."},
+      {"start_s": 20.0, "duration_s": 7.0, "text": "Stack three harmonies a third above the lead and pan the doubles hard left and right."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "High-pass the sub bass around 30 Hz so it doesn't muddy the kick.",
+     "technique": "sub-bass-highpass", "stage": "bassline", "genre": ["rnb"], "confidence": 0.9},
+    {"segment": 1, "claim_text": "Stack three harmonies a third above the lead and pan the doubles hard L/R.",
+     "technique": "vocal-stacking", "stage": "vocal-layering", "genre": ["rnb"], "confidence": 0.8}
+  ]
+}

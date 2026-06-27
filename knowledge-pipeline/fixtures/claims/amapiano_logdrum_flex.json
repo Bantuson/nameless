@@ -1,0 +1,15 @@
+{
+  "transcript": {
+    "video_id": "amapiano_logdrum_flex",
+    "caption_source": "manual",
+    "genre": ["amapiano"],
+    "segments": [
+      {"start_s": 18.0, "duration_s": 7.0, "text": "For the log drum I build it on FL Studio FLEX and shape it with distortion and a soft clipper."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "Build the amapiano log drum on FL Studio FLEX, shaped with distortion.",
+     "technique": "log-drum-sound-source", "stage": "drums", "genre": ["amapiano"],
+     "stance": "flex-synth", "confidence": 0.8}
+  ]
+}

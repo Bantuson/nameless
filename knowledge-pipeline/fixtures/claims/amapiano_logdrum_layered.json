@@ -1,0 +1,15 @@
+{
+  "transcript": {
+    "video_id": "amapiano_logdrum_layered",
+    "caption_source": "asr",
+    "genre": ["amapiano"],
+    "segments": [
+      {"start_s": 9.0, "duration_s": 7.0, "text": "I do not use FLEX, I layer a kick an 808 and a marimba sample to build the log drum."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "Build the amapiano log drum by layering a kick, an 808 and a marimba sample.",
+     "technique": "log-drum-sound-source", "stage": "drums", "genre": ["amapiano"],
+     "stance": "layered-samples", "confidence": 0.8}
+  ]
+}

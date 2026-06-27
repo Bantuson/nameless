@@ -185,10 +185,134 @@ is the one "real" adapter the tests use directly, because `sqlite3` is Python st
 
 ---
 
+# Phase 4 — Cited claim mining + cross-reference (the project's intellectual core)
+
+Phase 3 produced a *corpus of transcripts*. Phase 4 turns it into a *registry of cited claims* grouped
+into preserved consensus and conflict. This is the **make-or-break** stage: it is where the project's
+"quality in, quality out" promise is either kept or quietly broken. Everything here is in service of one
+discipline — **extract, then (later) synthesize** — and the whole point is that Phase 4 does ONLY the
+extract half. No opinionated defaults, no merged "best way", no SKILL.md. That boundary is the lesson.
+
+## 7. Why structured (tool-use) output beats free-form for reliable extraction
+
+The naive way to "extract claims with an LLM" is to ask for prose and parse it. That fails in exactly the
+ways that matter: the model writes fluent, confident text optimized for *readability*, not *faithfulness*,
+and you are left regex-scraping a paragraph that may have silently reworded the source.
+
+The reliable way is **structured tool-use**: define a tool (`emit_claims`) whose `input_schema` is a
+closed JSON Schema (`additionalProperties: false`), and **force** the model to call it
+(`tool_choice={"type": "tool", "name": "emit_claims"}`). Now the model cannot return prose — it must
+return a typed object whose shape *you* control. Three things follow:
+
+- **The schema is the contract.** Each claim must carry `claim_text`, `technique`, `stage`,
+  `timestamp_ms`, `quote`, `confidence`. There is nowhere in the schema to put a "summary" or a
+  "recommended default" — the closed object structurally forbids smuggling synthesized fields in.
+- **Parsing is validation, not scraping.** `parse_extractor_output` runs the tool input through a
+  pydantic model; malformed entries are dropped, never coerced into something plausible.
+- **Reliable output comes from structure, not clever prompts.** The careful prompt (below) still matters,
+  but the *schema* is what makes the output machine-trustworthy.
+
+We use `claude-opus-4-8` with **no `thinking`** — deterministic extraction does not want exploratory
+reasoning, and forced tool-choice pairs cleanly with that. (Cost note for the metered path: ~$5 / 1M
+input, ~$25 / 1M output tokens; a single ~3-minute tutorial transcript is well under 2k input tokens, so
+extraction is cheap — the budget risk is *volume* × *re-runs*, which idempotent mining controls.)
+
+## 8. The extract-THEN-synthesize split — and exactly which GIGO failures it defeats
+
+This is the heart of it. An LLM asked to "summarize 100 transcripts into a skill" in one pass will,
+characteristically:
+
+- **Fabricate specificity** — invent an exact Hz/dB/ratio that no source stated (confident numbers read
+  as expertise).
+- **Conflate genres** — let an amapiano log-drum trick bleed into the "deep-house bass" advice.
+- **Over-generalize from one source** — promote one creator's habit to "the way".
+- **Launder disagreement** — average two opposing compression philosophies into mush, or assert a false
+  consensus.
+- **Drift citations** — attach a real citation to a claim the source did not make.
+
+The two-pass split structurally prevents each one, and Phase 4 is **pass 1 only**:
+
+| Pass | What it may do | What defeats the failure |
+|---|---|---|
+| **1 — extract (this phase)** | Emit atomic, individually-cited claims; group them; preserve conflict. | Numbers must be *quoted*, not generated. Genre is per-claim and evidenced. Each claim is one source. Disagreement becomes a first-class `conflict`. |
+| **2 — synthesize (Phase 5)** | Decide an opinionated default — but **only over the extracted claim set**, never raw transcripts, and only by citing claims that already exist. | The synthesizer can cite nothing that pass 1 didn't extract, so citation drift is impossible by construction. |
+
+The key insight: **a synthesizer that can only cite pre-extracted, pre-verified claims cannot drift, cannot
+invent a number, and cannot launder a conflict** — because the conflict is sitting in the data as two
+claims it must reckon with. Phase 4's job is to make that data faithful. Phase 5's freedom is bounded by it.
+
+## 9. Citation discipline — snapshot-anchored verbatim quotes, and drift detection
+
+Every claim cites `source_video_id @ timestamp_ms` with a VERBATIM `quote`, and that quote is checked
+against the immutable Phase-3 snapshot by the pure `verify_citation`:
+
+- **The quote must occur at/near the cited timestamp.** We find the best-matching segment (normalized
+  text, **digits + units preserved** so "300" and "hz" never get stripped) and compare its start to the
+  cited time.
+- **Three honest verdicts, not one bool:** `verified` (found in tolerance), `drift` (found, but at the
+  *wrong* time — the dangerous case), `not_found` (hallucinated). Drift is the most corrosive failure
+  because it *looks* auditable; surfacing it as its own verdict is the point.
+- **Re-anchoring at parse time.** Even before verification, `parse_extractor_output` snaps each claim's
+  timestamp to the segment its quote actually lives in — so a model that mis-states a timestamp cannot
+  poison the anchor. The model owns the *content* fields; the *identity/citation* fields
+  (`source_video_id`, `caption_source`, and the re-anchored `timestamp_ms`) come from the transcript and
+  cannot be hallucinated.
+
+`verify_citation` is deliberately the **kernel of Phase 5's hard gate**: Phase 4 computes it and *records*
+it (and can drop on failure with `--require-citation`), Phase 5 turns it into a non-negotiable reject.
+
+## 10. Consensus vs conflict as first-class data (and why distinct sources, not repeats)
+
+`cross_reference` groups claims by topic (`stage/technique`, normalized) and partitions each topic:
+
+- **uncontested** → all claims are `consensus` (corroboration);
+- **contested** (≥2 distinct stances) → all claims are `conflicts`, **both camps preserved**, and **Phase 4
+  picks no winner**.
+
+This is the answer to the producer reality that *everyone disagrees about everything* — the amapiano log
+drum is built on FL Studio FLEX by some and from layered samples by others. A pipeline that "helpfully"
+resolves that has destroyed exactly the nuance the user needs. So the conflict is recorded as data; the
+`ClaimCluster.sides()` view shows the two camps; and the decision is deferred to Phase 5, made *on top of*
+the evidence, never by deleting a side.
+
+**Corroboration counts DISTINCT sources, not repeats.** One creator restating a point three times is not
+agreement — `distinct_consensus_sources` counts unique `source_video_id`, and `dedup_claims` collapses
+same-source repeats before clustering. Cross-source agreement is signal; same-source repetition is noise.
+(A nice property: clusters are a *pure function of the full claim set*, so the pipeline recomputes them
+globally after every mine and replaces them — incremental mining can never leave a stale cluster.)
+
+## 11. Semantic dedup — a deliberate trade-off, kept optional
+
+Exact-text dedup misses paraphrase ("roll off the low end" ≈ "high-pass the bottom"). A `SimilarityIndex`
+hook (keyword Jaccard by default; embedding cosine when env-gated) can collapse same-source near-paraphrases.
+We keep it **off by default and same-source-only** on purpose:
+
+- *On by default* would make the core non-deterministic and risk **erasing genuine corroboration** — the
+  worst possible dedup error, because corroboration is the entire confidence signal. Same-source-only means
+  the dedup can never reduce a 3-source consensus to a 2-source one.
+- The keyword fake keeps the pure core testable; the embedding adapter is a drop-in upgrade behind the same
+  `similarity(a, b)` seam for when paraphrase detection needs to be smarter than token overlap.
+
+## 12. Confidence calibration + caption-source provenance
+
+Two trust signals ride along with every claim. **Confidence** is calibrated by the prompt's rubric
+(0.9 explicit+parameterized, 0.7 explicit, 0.5 implied, <0.4 vague). **`caption_source`** records whether
+the evidence came from a `manual` caption, our own `asr`, or YouTube `auto` captions — and auto-captions
+mis-hear the very jargon and numbers that matter (PITFALLS #1: "log drum" → "lock drama", "300 Hz" →
+"three hundred hurts"). Carrying both means Phase 5 can weight a parameterized claim from a manual caption
+far above a vague one scraped from auto-captions — *without re-reading the audio*. That is the layered,
+auditable trust the project promised, built into the claim schema rather than bolted on later.
+
+---
+
 ## Further reading / sources
 
 - youtube-transcript-api IP-blocking (cloud vs residential), 2025–26 — project GitHub issues; PoToken.
 - faster-whisper (SYSTRAN) + CTranslate2 quantization — project READMEs; `large-v3` / `large-v3-turbo`.
 - ITU-R BS.1770 / sampling-evidence durability — general practice; mirrored from the project PITFALLS.md.
+- Anthropic tool-use / structured output + model ids/pricing — Anthropic SDK docs (`claude-opus-4-8`,
+  forced `tool_choice`, ~$5/$25 per 1M tokens). Grounding for the Phase-4 extractor.
+- LLM claim-extraction / citation-verification patterns — arXiv 2511.16198 (SemanticCite); the project's
+  `.planning/research/{FEATURES,PITFALLS}.md` (consensus/conflict layered output; the GIGO failure modes).
 - The project's own `.planning/research/{STACK,PITFALLS,ARCHITECTURE}.md` — the grounding for every
   decision above.

@@ -8,6 +8,11 @@ cite. Requirements: KNOW-01..04.
 
 Architecture: ports + adapters (real, heavy-imports-lazy; and deterministic fakes) + a pure core +
 pure orchestration — mirroring the Phase-2 ``workers/`` testability pattern. See README.md / LEARNING.md.
+
+Phase 4 EXTENDS this same package with cited claim mining + cross-reference (KNOW-05/06): a typed
+``Claim`` / ``ClaimCluster`` domain, a ``ClaimExtractor`` (real Claude tool-use + deterministic fake),
+pure ``verify_citation`` / ``cross_reference`` / ``dedup_claims``, a ``ClaimStore`` (sqlite + in-memory),
+the ``MiningPipeline``, and the ``claims`` CLI — extraction + grouping only, ZERO synthesis (Phase 5).
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
