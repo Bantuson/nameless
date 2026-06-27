@@ -1,8 +1,8 @@
-# `knowledge-pipeline/` — Nameless offline knowledge pipeline (ingestion + claim mining)
+# `knowledge-pipeline/` — Nameless offline knowledge pipeline (ingestion + claim mining + skill synthesis)
 
 The build-time authoring tool that grounds Nameless's craft (PRD M0 foundation, research
-`ARCHITECTURE.md`). It runs in two stages, both build-time, both writing into one local
-`registry.sqlite`:
+`ARCHITECTURE.md`). It runs in three stages, all build-time, all writing into one local `registry.sqlite`
+(Phase 5 also writes `skills/production/**/SKILL.md` files):
 
 - **Phase 3 — ingestion stage** (`corpus` CLI): discover north-star production tutorials, fetch their
   transcripts **locally** with throttling + snapshot-on-ingest, fall back to ASR when captions are
@@ -11,8 +11,13 @@ The build-time authoring tool that grounds Nameless's craft (PRD M0 foundation, 
 - **Phase 4 — cited claim mining + cross-reference** (`claims` CLI): mine the snapshot corpus into a
   registry of **atomic, individually-cited claims** (Claude tool-use), verify each citation against the
   snapshot, and cross-reference them into **preserved consensus and conflict** — **extraction only, ZERO
-  synthesis** (the opinionated default + SKILL.md are Phase 5). This is the EXTRACT half of the make-or-break
-  two-pass design that defeats GIGO.
+  synthesis**. This is the EXTRACT half of the make-or-break two-pass design that defeats GIGO.
+- **Phase 5 — layered skill synthesis + the hard citation gate** (`skills` CLI): synthesize the cited-claim
+  layer into **authored, layered Claude Skills** (opinionated default + preserved consensus/conflict, every
+  claim cited) — **synthesizing ONLY over the claim set** — then run a pure, programmatic **citation gate**
+  that REJECTS any draft with an invented number, an uncited assertion, or an untraceable citation. Skills
+  emit as `status: draft` and ship only after a **human spot-audit** (`skills audit` → `skills promote`).
+  This is the SYNTHESIZE half — where "quality in, quality out" becomes a check, not a hope.
 
 This is a **sibling of `workers/`, NOT a runtime plane.** It runs on your machine when you want to
 (re)build the corpus/claims, writes files + a local `registry.sqlite`, and then disappears from the
@@ -21,7 +26,10 @@ two knowledge layers are deliberately separate.
 
 - Requirements covered: **KNOW-01..04** (Phase 3 — discovery, fetch+snapshot, ASR+extractability, ≥100
   north-star target); **KNOW-05** (atomic cited claims, typed production-stage × genre schema, no
-  synthesis), **KNOW-06** (cross-reference consensus + conflict preserved as first-class data).
+  synthesis), **KNOW-06** (cross-reference consensus + conflict preserved as first-class data); **KNOW-07**
+  (layered synthesis over the claim set), **KNOW-08** (the hard citation gate — no invented numbers),
+  **KNOW-09** (authored skills, P1 north-star cells first, `skills/production/`), **KNOW-11** (human
+  spot-audit + gated promotion).
 - The ideas (captions, IP-blocking, extractability, snapshots, faster-whisper **and** structured tool-use
   extraction, the extract-then-synthesize split, citation discipline, consensus/conflict, semantic-dedup
   trade-offs) are taught in depth in **[`LEARNING.md`](./LEARNING.md)**.
@@ -43,39 +51,54 @@ ports — it contains no yt-dlp, no youtube-transcript-api, no faster-whisper, n
 | `ClaimExtractor` (P4) | `AnthropicClaimExtractor` (Claude tool-use, `claude-opus-4-8`) | `FakeClaimExtractor` (scripted + rule-based) |
 | `ClaimStore` (P4) | `SqliteClaimStore` (extends `registry.sqlite`) | `InMemoryClaimStore` |
 | `SimilarityIndex` (P4) | `EmbeddingSimilarityIndex` (sentence-transformers) | `KeywordSimilarityIndex` (Jaccard) |
+| `SkillSynthesizer` (P5) | `AnthropicSkillSynthesizer` (Claude `emit_skill` tool-use) | `FakeSkillSynthesizer` (deterministic template) |
+| `SkillStore` (P5) | `FilesystemSkillStore` (`skills/production/**/SKILL.md` + `registry.sqlite`) | `InMemorySkillStore` |
 
 The **pure core** is the testable heart: `query_grid`, `extractability_score`, `fallback_decision`,
-`snapshot_record`, `dedup`, a VTT parser (Phase 3) — **plus `verify_citation`, `cross_reference`,
-`dedup_claims`, and the `emit_claims` extraction schema + normalization (Phase 4)** — all deterministic,
-no I/O, no `anthropic`.
+`snapshot_record`, `dedup`, a VTT parser (Phase 3); `verify_citation`, `cross_reference`, `dedup_claims`,
+the `emit_claims` extraction schema (Phase 4); **plus `cell_selection` (P1 north-star ordering),
+`citation_gate` (the hard reject gate), `synthesis_template` (deterministic layered synthesis),
+`layered_emitter` (SKILL.md), `audit` (coverage + spot-audit), and the `emit_skill` synthesis schema
+(Phase 5)** — all deterministic, no I/O, no `anthropic`. **The citation gate is pure and is NOT a port**:
+it must judge the real Claude synthesizer and the fake identically — there is no "test gate".
 
 ```
 src/knowledge_pipeline/
   domain/      models.py (VideoRef, RawTranscript+segments, SnapshotRecord, ExtractabilityResult, CorpusEntry, …)
                claims.py  (Claim, ClaimCluster, ClaimStats — the typed KNOW-05/06 boundary)   [P4]
-               keys.py    (pure normalize_text/normalize_key/topic_key/compute_claim_id)       [P4]
+               skills.py  (ProductionCell, SkillCitation/Section/Draft, AuthoredSkill, P1 grid)   [P5]
+               keys.py    (pure normalize_text/normalize_key/topic_key/compute_claim_id · numbers)  [P4/P5]
                genres.py  (the north-star genre x stage grid + artist anchors)
   pure/        P3: query_grid · extractability · fallback · snapshot · dedup · captions · vocab
                P4: citation.py (verify_citation) · cross_reference.py · claim_dedup.py · extraction_schema.py
-  prompts.py   versioned claim-extraction system prompt (KNOW-05; "extract only, never invent numbers")  [P4]
+               P5: cell_selection · citation_gate (the HARD gate) · synthesis_template · layered_emitter ·
+                   audit · synthesis_schema (emit_skill)
+  prompts.py   versioned claim-extraction (P4) + skill-synthesis (P5) system prompts (extract/synth only,
+               never invent numbers, cite everything)
   ports.py     P3: DiscoverySource · TranscriptFetcher · Transcriber · CorpusStore · Clock · RateLimiter
-               P4: ClaimExtractor · SimilarityIndex · ClaimStore
-  adapters/    fakes + stdlib (eager): *_fake.py · corpus_mem.py · clock_fake.py · rate_limiter.py ·
-               claim_extractor_fake.py · claim_store_mem.py · claim_store_sqlite.py · similarity_keyword.py
+               P4: ClaimExtractor · SimilarityIndex · ClaimStore     P5: SkillSynthesizer · SkillStore
+  adapters/    fakes + stdlib (eager): *_fake.py · corpus_mem · clock_fake · rate_limiter ·
+               claim_extractor_fake · claim_store_mem · claim_store_sqlite · similarity_keyword ·
+               skill_synthesizer_fake · skill_store_mem · skill_store_fs (real, sqlite stdlib)   [P5]
                real, heavy-imports LAZY: discovery_ytdlp · fetch_youtube · transcribe_whisper · corpus_fs ·
-               claim_extractor_anthropic (anthropic) · similarity_embeddings (sentence-transformers)
+               claim_extractor_anthropic · similarity_embeddings · skill_synthesizer_anthropic (anthropic) [P5]
   registry_sql.py  DDL for registry.sqlite (sources · snapshots · extractability)
   claims_sql.py    additive DDL extending registry.sqlite (claims · clusters · cluster_members)   [P4]
-  pipeline.py        IngestPipeline  — discover → dedup → fetch+fallback → snapshot → score → register
-  mining_pipeline.py MiningPipeline  — extract → verify citation → dedup → cross-reference → persist   [P4]
+  skills_sql.py    additive DDL extending registry.sqlite (skills · skill_citations)               [P5]
+  pipeline.py          IngestPipeline    — discover → dedup → fetch+fallback → snapshot → score → register
+  mining_pipeline.py   MiningPipeline    — extract → verify citation → dedup → cross-reference → persist   [P4]
+  synthesis_pipeline.py SynthesisPipeline — select cells → synthesize → GATE → emit → store (draft)        [P5]
   cli.py           `corpus discover | ingest | list | show | stats`
   claims_cli.py    `claims mine | list | show | stats`                                            [P4]
+  skills_cli.py    `skills synthesize | list | show | audit | promote | stats`                    [P5]
   fixtures.py · claim_fixtures.py   load fixtures/{transcripts,claims}/*.json into the fake-adapter inputs
 fixtures/transcripts/  6 fixture videos (incl. visual-only + sparse/low-signal)
 fixtures/claims/       5 fixtures: a 3-source consensus set + the amapiano FLEX-vs-layered conflict
-tests/        fakes-only pytest suite — P3 (ingestion) + P4 (claim schema, citation, cross-reference,
-              dedup, extraction schema, claim store [mem + real sqlite], mining e2e, claims CLI,
-              no-synthesis boundary). 134 tests, run on the base env.
+../skills/production/  the AUTHORED, COMMITTED example skills emitted by `skills synthesize --fixtures`
+                       (drums/amapiano = the FLEX-vs-layered conflict; bassline/* = 3-source consensus; …)
+tests/        fakes-only pytest suite — P3 (ingestion) + P4 (claim mining) + P5 (cell selection, the
+              citation gate PASS+REJECT, synthesis-only invariant, layered emitter, skill store [mem +
+              real fs], audit/promote, synthesis e2e, skills CLI, no-synthesis boundary). 201 tests, base env.
 ```
 
 ## Build mode (course/learning project) — code-complete, NOT run live on the build box
@@ -91,13 +114,18 @@ run from a home IP). The code is complete and real; the network/ASR paths are **
 ```bash
 cd knowledge-pipeline
 uv sync --extra dev          # installs only pydantic + pytest
-uv run pytest -q             # 134 tests (77 Phase 3 + 57 Phase 4):
+uv run pytest -q             # 201 tests (P3 + P4 + P5), all on the base env:
                              # P3 — query grid, extractability gate, fallback ladder, snapshot hash/date,
                              #      dedup, throttle-on-fake-clock, corpus store (mem + real sqlite), e2e, CLI
                              # P4 — claim schema + keys, citation verify (positive/drift/not-found),
                              #      cross-reference consensus AND conflict-preservation, claim dedup,
-                             #      extraction schema + rule-based fake, claim store (mem + real sqlite),
-                             #      mining e2e, claims CLI, the no-synthesis boundary invariant
+                             #      extraction schema + rule-based fake, claim store, mining e2e, claims CLI
+                             # P5 — cell selection (P1 ordering), the CITATION GATE (grounded PASS + every
+                             #      reject: invented-number/uncited/nonexistent-source/tampered/ungrounded/rot),
+                             #      synthesis-only-over-claims invariant, layered emitter, skill store
+                             #      (mem + real fs), audit coverage + reproducible sample, promote (draft→
+                             #      promoted), synthesis e2e (incl. a poisoned synthesizer → all rejected),
+                             #      skills CLI, the no-synthesis boundary (anthropic never imported)
 ```
 
 (If not using uv: `pip install pydantic pytest` then `PYTHONPATH=src pytest -q`.)
@@ -117,11 +145,24 @@ PYTHONPATH=src python -m knowledge_pipeline.claims_cli list  --corpus-root ./dem
 PYTHONPATH=src python -m knowledge_pipeline.claims_cli list  --corpus-root ./demo-claims --by-genre
 PYTHONPATH=src python -m knowledge_pipeline.claims_cli show  <CLAIM_ID> --corpus-root ./demo-claims     # trace to source quote + ts + video
 PYTHONPATH=src python -m knowledge_pipeline.claims_cli stats --corpus-root ./demo-claims
+
+# Phase 5 — layered skill synthesis + the hard citation GATE (FakeSkillSynthesizer + real FilesystemSkillStore)
+#   self-contained: mines the claim fixtures, synthesizes, GATES, and writes real SKILL.md files to <root>.
+PYTHONPATH=src python -m knowledge_pipeline.skills_cli synthesize --fixtures --corpus-root ./demo-skills --skills-root ./demo-skills
+PYTHONPATH=src python -m knowledge_pipeline.skills_cli list   --corpus-root ./demo-skills --skills-root ./demo-skills --by-genre
+PYTHONPATH=src python -m knowledge_pipeline.skills_cli show   <SKILL_ID> --corpus-root ./demo-skills --skills-root ./demo-skills --body  # the layered SKILL.md
+PYTHONPATH=src python -m knowledge_pipeline.skills_cli audit  --corpus-root ./demo-skills --skills-root ./demo-skills --sample 5        # the human spot-audit
+PYTHONPATH=src python -m knowledge_pipeline.skills_cli promote <SKILL_ID> --corpus-root ./demo-skills --skills-root ./demo-skills --yes  # human-gated draft→promoted
 ```
 
 The fixtures carry a real **consensus set** (the sub-bass high-pass corroborated across deep-house, R&B
 and amapiano = 3 distinct sources) and the **amapiano log-drum FLEX-vs-layered conflict** (both stances
-preserved, never collapsed) — so the offline run demonstrates KNOW-06 directly.
+preserved, never collapsed) — so the offline run demonstrates KNOW-06 directly, and the Phase-5 synthesis
+turns them into authored, gated, draft SKILL.md files (KNOW-07/08/09). **The committed example skills under
+`../skills/production/` were produced exactly this way — by the fake synthesizer, with no API call** — and
+because the pipeline only writes files for drafts that PASS the gate, their existence is proof the gate
+passed. `drums/amapiano/SKILL.md` shows the opinionated default on one camp with both camps preserved
+beside it; `bassline/deep-house/SKILL.md` shows a HIGH-confidence 3-source consensus default.
 
 ### Env-gated (the LIVE ingest — NOT run here; run from your home machine)
 
@@ -178,6 +219,33 @@ The budget risk is therefore *volume × re-runs*, which the content-addressed, i
 the API per targeted video — scope `--video` or re-mine deliberately). Optional `--extra embed`
 (sentence-transformers) for semantic dedup is local compute, not metered.
 
+### Env-gated (LIVE skill synthesis — Phase 5 — NOT run here)
+
+Live synthesis calls Claude (`claude-opus-4-8`) with forced `emit_skill` tool-use, once per authored cell,
+synthesizing ONLY over that cell's mined claims. **This is metered spend**; the build box runs only the
+deterministic fake (the committed example skills above). The hard citation gate runs identically over the
+real and fake output — a draft Claude returns that asserts an uncited number is REJECTED just the same.
+
+```bash
+# 1. Install the extractor extra (shared with Phase 4; PIN the exact anthropic version first):
+uv sync --extra extract
+
+# 2. Set your key, then synthesize the P1 north-star cells from the mined claim layer (idempotent upsert):
+export ANTHROPIC_API_KEY=sk-ant-...
+uv run skills synthesize --corpus-root ./.nameless-knowledge/corpus --skills-root .   # P1 cells -> draft SKILL.md
+uv run skills synthesize --corpus-root ./.nameless-knowledge/corpus --skills-root . --all   # every evidenced cell
+
+# 3. Audit, then promote what survives the human spot-audit (these read the registry/files — no API):
+uv run skills list   --corpus-root ./.nameless-knowledge/corpus --by-genre
+uv run skills audit  --corpus-root ./.nameless-knowledge/corpus --sample 5            # coverage + flags
+uv run skills show   <SKILL_ID> --corpus-root ./.nameless-knowledge/corpus --body     # review against citations
+uv run skills promote <SKILL_ID> --corpus-root ./.nameless-knowledge/corpus --yes     # human-gated draft→promoted
+```
+
+A single skill is a small output (a few cited sections), so per-cell synthesis is a few cents; the budget
+risk is again *cells × re-runs*, controlled by the cell-addressed idempotent upsert. The citation gate, the
+emitter, the audit, and `promote` are **pure / local** — only `synthesize` (live) is metered.
+
 ## ToS / local-first (read before the live ingest)
 
 - `youtube-transcript-api` and `yt-dlp` are **unofficial** and technically against YouTube's ToS. At
@@ -196,12 +264,16 @@ the API per targeted video — scope `--video` or re-mine deliberately). Optiona
 - **Phase 3 → Phase 4.** The corpus (immutable snapshot files + `registry.sqlite`) is the input to claim
   mining. The per-segment timestamps are the substrate Phase 4 cites as `video_id @ ts`; the snapshot hash +
   retrieval date keep those citations auditable even after a channel takedown.
-- **Phase 4 → Phase 5.** The `claims` + `clusters` tables (atomic cited claims, grouped into preserved
-  consensus/conflict) are the input to **synthesis + the hard citation gate**. Phase 5 may decide an
-  opinionated default and author `SKILL.md`, but **only over this extracted claim set** — it can cite
-  nothing Phase 4 didn't extract, and `verify_citation` (the pure function Phase 4 already runs) becomes its
-  non-negotiable reject gate. The extract-then-synthesize boundary is what makes the eventual skills
-  trustworthy.
+- **Phase 4 → Phase 5 (now implemented).** The `claims` + `clusters` tables (atomic cited claims, grouped
+  into preserved consensus/conflict) are the input to **synthesis + the hard citation gate**. Phase 5
+  decides an opinionated default and authors `SKILL.md`, but **only over this extracted claim set** — it
+  cites nothing Phase 4 didn't extract, and the pure `citation_gate` (which reuses Phase-4 `verify_citation`)
+  is its non-negotiable reject gate: an invented number or an untraceable citation is REJECTED, never
+  shipped. The extract-then-synthesize boundary is what makes the skills trustworthy.
+- **Phase 5 → M1 (PRD §12).** The authored, human-promoted `skills/production/<stage>/<genre>/SKILL.md`
+  files are what the M1 arranger/mixer agents load to ground their craft. They are version-controlled prose
+  + citations — token-cheap until triggered, opinionated, and auditable — the signature architectural bet
+  over a RAG vector store.
 
 ## Licensing note
 

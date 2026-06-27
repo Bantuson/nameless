@@ -305,6 +305,114 @@ auditable trust the project promised, built into the claim schema rather than bo
 
 ---
 
+---
+
+# Phase 5 — Layered skill synthesis behind a hard citation gate (closing the GIGO loop)
+
+Phase 4 produced a *registry of cited claims* grouped into preserved consensus/conflict. Phase 5 is where
+the project finally makes a *decision* — it authors the **opinionated Claude Skills** the M1 arranger/mixer
+agents load — and it is the moment the "quality in, quality out" promise is either kept or broken. The
+whole phase is built so that the decision can be *opinionated* without ever being *unfaithful*. Three ideas
+do that work: synthesize-only-over-claims, the citation gate, and the layered output + human spot-audit.
+
+## 13. Synthesize ONLY over the claim set (why the synthesizer can't go rogue)
+
+The naive "summarize 100 transcripts into a skill" failure modes (§8) all share one root: the model is
+allowed to draw on its *own* training while it writes. Phase 5 removes that freedom structurally. The
+synthesizer — real Claude or the deterministic fake — is handed **only the extracted claims for one cell**
+(a `genre × stage`), and the contract is: *decide how to present and prioritize THIS evidence; add nothing
+to it.*
+
+- The **fake** (`template_synthesize`, the reference behaviour) builds every section body *verbatim* from
+  `claim_text`. There is literally no code path that writes a number or a technique — it can only select
+  and concatenate claims. The test `test_every_number_in_the_draft_comes_from_a_cited_claim` extracts every
+  numeric token from the produced draft and asserts it is a subset of the numbers in the input claims'
+  quotes. The fake is *structurally incapable* of inventing.
+- The **real** synthesizer (Claude, `emit_skill` forced tool-use) *could* in principle write a number, so
+  it is bounded two further ways: it cites claims **by id only** (it never writes a quote/timestamp —
+  `parse_synthesizer_output` re-grounds each citation from the real claim, so a fabricated receipt is
+  impossible), and then its output goes through the same gate as everyone else. The model gets **no special
+  pass**.
+
+The opinionated decision still happens — *which* claim becomes the default, *which* camp a contested
+default takes — but it is a decision *about* the evidence, made *on top of* it, never an addition to it.
+
+## 14. The citation gate — the programmatic answer to "quality in, quality out"
+
+`citation_gate(draft, claims) -> Pass | Rejected[reasons]` is the heart of the phase: a **pure** function
+that REJECTS any draft it cannot fully trace back to cited, real, verbatim evidence. It runs five rules over
+the *structured draft* (not the rendered markdown — see below):
+
+| Rule | Catches | How |
+|---|---|---|
+| R1 uncited | an assertion with no receipt | an assertive section must cite ≥1 claim |
+| R2 nonexistent-source / tampered | a citation to a claim that doesn't exist, or a doctored quote | the cited id must be in the claim set AND the citation quote must equal the real claim's quote |
+| **R3 invented-number** | the headline GIGO failure — "40 Hz" when no source said 40 | every numeric token a section asserts must appear in one of *that section's own* cited quotes |
+| R4 ungrounded | hallucinated craft that smuggles no number | the asserted prose must be token-covered by its cited claims (reuses the `verify_citation` coverage idea) |
+| R5 citation-rot | a citation that no longer anchors in its source | reuses Phase-4 `verify_citation` against the snapshot |
+
+Two design choices are worth internalizing:
+
+1. **The gate is a pure function, not a port.** Ports have fakes; the gate must *not*. You never want a
+   "test gate" that is weaker than production, because the gate IS the quality guarantee. The real Claude
+   synthesizer and the fake template are judged by the identical gate — which is exactly why a fakes-only
+   test suite can prove the production guarantee. The pipeline test
+   `test_a_synthesizer_that_invents_a_number_is_rejected_by_the_gate` wires a deliberately-malicious
+   synthesizer and watches every poisoned cell get rejected.
+2. **The gate checks the draft's craft body, not the emitted `.md`.** This is subtle and important. The
+   emitter decorates the skill with corroboration counts in headings ("(3 sources)"), `mm:ss` timestamps,
+   and `clm_…` ids — all of which contain digits that are *references*, not asserted craft. If the gate
+   scanned the rendered markdown it would false-reject the "3" in a heading. So the gated `body` fields are
+   kept pure (claim-derived craft only) and all machine-generated decoration is added *after* the gate, by
+   the emitter. Keeping presentation out of the gated content is what lets a heading honestly say "(3
+   sources)" without that "3" needing to appear in a quote. (This is why `template_synthesize` deliberately
+   puts the "Default approach:" framing and the contested hedge in the *emitter*, not the body.)
+
+The single most instructive test pair: a grounded draft PASSES; the *same* draft with `40 Hz` substituted
+for `30 Hz` in the default body is REJECTED with `invented_number: asserts number(s) ['40'] present in no
+cited source quote`. That reject — mechanical, explainable, un-overridable — is the entire thesis of the
+project rendered as a unit test.
+
+## 15. Why "numbers as a set difference" is the right primitive
+
+Producer craft lives in parameters: 30 Hz, -6 dB, 120 BPM, an 808. The corrosive failure is a *confident*
+number with no evidence behind it. We make that catchable by reducing it to set arithmetic
+(`keys.numbers`): the numbers a section *asserts* minus the numbers present in its *cited quotes*; if the
+difference is non-empty, reject. We compare magnitude only ("30" from "30 Hz") because the *unit* travels in
+the prose — a quote saying "30 hz" grounds a skill saying "30 Hz", but a wrong magnitude (40) never passes.
+Canonicalization folds `030`/`30.0`/`30` so trivial formatting differences don't matter. It is deliberately
+strict: it would rather reject a true-but-unsupported number than admit a fabricated one, because in this
+domain an unsupported number is indistinguishable from a hallucinated one.
+
+## 16. Layered output + the human spot-audit (opinionated AND trustworthy)
+
+The emitted SKILL.md is **layered** on purpose (`layered_emitter`): an `## Default — act on this` block the
+agent runs with, a `## Consensus` block with the corroborated topics and their distinct-source counts, a
+`## Contested` block that keeps **both camps** of every disagreement side by side (the amapiano log-drum
+FLEX-vs-layered split survives all the way into the skill), and a `## Citations` roll-up mapping every
+`clm_…` to `video_id @ mm:ss` and its verbatim quote. The agent gets a single decision to act on; the human
+gets the receipts. Most pipelines give you one or the other — an opinionated black box, or a pile of
+retrieved chunks. The layered format is "opinionated *but* traceable."
+
+And because a solo builder cannot eyeball every claim, the skill ships as **`status: draft`** and nothing
+reaches the agents unaudited. `skills audit` draws a reproducible (seeded) sample, computes citation
+coverage, and raises flags a human should not promote blind — `contested-default` (the default sits on a
+genuine disagreement → LOW confidence), `single-source-default` (one creator's habit, not consensus),
+`no-consensus`. Promotion is a deliberate, **human-gated** action (`skills promote <id> --yes`) — the CLI
+shows the flags and refuses to flip status without the explicit confirmation. That is the last link in the
+GIGO chain: extraction kept the evidence faithful (Phase 4), synthesis stayed bounded to it and the gate
+proved it (Phase 5), and a human signs off before any of it teaches the machine.
+
+## 17. The committed example skills — a tangible artifact with no API call
+
+Running `skills synthesize --fixtures` mines the bundled claim fixtures (Phase-4 fakes), synthesizes with
+the deterministic template, GATES, and writes **real SKILL.md files** under `skills/production/`. Because the
+pipeline only writes files for drafts that *passed the gate*, the committed files are themselves proof the
+gate passed — e.g. `skills/production/drums/amapiano/SKILL.md` shows the opinionated default on the
+flex-synth camp with the layered-samples camp fully preserved beside it, every line cited, all with zero
+tokens spent. That file is both a working authored Claude Skill and a teaching artifact for the layered
+format.
+
 ## Further reading / sources
 
 - youtube-transcript-api IP-blocking (cloud vs residential), 2025–26 — project GitHub issues; PoToken.
@@ -314,5 +422,10 @@ auditable trust the project promised, built into the claim schema rather than bo
   forced `tool_choice`, ~$5/$25 per 1M tokens). Grounding for the Phase-4 extractor.
 - LLM claim-extraction / citation-verification patterns — arXiv 2511.16198 (SemanticCite); the project's
   `.planning/research/{FEATURES,PITFALLS}.md` (consensus/conflict layered output; the GIGO failure modes).
-- The project's own `.planning/research/{STACK,PITFALLS,ARCHITECTURE}.md` — the grounding for every
+- Claude Skills authoring (SKILL.md frontmatter `name`/`description` + progressive-disclosure body) —
+  Anthropic Agent Skills docs. The grounding for the Phase-5 emitter's frontmatter contract.
+- Citation/grounding gates + "synthesize only over retrieved evidence" — the project's `PITFALLS.md` #3
+  ("never let the LLM invent numbers"; "human spot-audit before promotion") is the direct source for the
+  Phase-5 gate + audit design.
+- The project's own `.planning/research/{STACK,PITFALLS,ARCHITECTURE,FEATURES}.md` — the grounding for every
   decision above.

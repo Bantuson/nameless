@@ -27,6 +27,13 @@ Phase-4 stdlib-only adapters (imported EAGERLY — pydantic + stdlib only):
       - :class:`~knowledge_pipeline.adapters.claim_store_mem.InMemoryClaimStore`
       - :class:`~knowledge_pipeline.adapters.claim_store_sqlite.SqliteClaimStore`  (REAL — sqlite is stdlib)
       - :class:`~knowledge_pipeline.adapters.similarity_keyword.KeywordSimilarityIndex`
+
+Phase-5 stdlib-only adapters (imported EAGERLY — pydantic + stdlib only):
+      - :class:`~knowledge_pipeline.adapters.skill_synthesizer_fake.FakeSkillSynthesizer`
+      - :class:`~knowledge_pipeline.adapters.skill_store_mem.InMemorySkillStore`
+      - :class:`~knowledge_pipeline.adapters.skill_store_fs.FilesystemSkillStore`  (REAL — sqlite is stdlib)
+    REAL LLM adapter (NOT imported here — anthropic LAZY inside __init__):
+      - ``skill_synthesizer_anthropic.AnthropicSkillSynthesizer``
 """
 
 from .claim_extractor_fake import FakeClaimExtractor
@@ -40,6 +47,9 @@ from .discovery_fake import FixtureDiscoverySource
 from .fetch_fake import FixtureTranscriptFetcher
 from .rate_limiter import IntervalRateLimiter, NoOpRateLimiter
 from .similarity_keyword import KeywordSimilarityIndex
+from .skill_store_fs import FilesystemSkillStore
+from .skill_store_mem import InMemorySkillStore
+from .skill_synthesizer_fake import FakeSkillSynthesizer
 from .transcribe_fake import FixedTextTranscriber
 
 __all__ = [
@@ -58,4 +68,8 @@ __all__ = [
     "InMemoryClaimStore",
     "SqliteClaimStore",
     "KeywordSimilarityIndex",
+    # Phase 5 — skill synthesis
+    "FakeSkillSynthesizer",
+    "InMemorySkillStore",
+    "FilesystemSkillStore",
 ]

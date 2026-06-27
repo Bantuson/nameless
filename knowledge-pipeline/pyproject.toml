@@ -17,15 +17,16 @@
 #                                       — sqlite3 is stdlib).
 #   * [ingest]  — yt-dlp + youtube-transcript-api: the REAL DiscoverySource + TranscriptFetcher (Phase 3).
 #   * [asr]     — faster-whisper: the REAL ASR fallback Transcriber (Phase 3).
-#   * [extract] — anthropic: the REAL ClaimExtractor (Phase 4, tool-use). Env-gated (key + tokens).
+#   * [extract] — anthropic: the REAL ClaimExtractor (Phase 4) + SkillSynthesizer (Phase 5), tool-use.
+#                 Env-gated (key + tokens).
 #   * [embed]   — sentence-transformers: the REAL SimilarityIndex (Phase 4, optional semantic dedup).
 #   * [dev]     — pytest.
 # So `uv sync --extra dev` runs every fake test; the heavy extras pull the real, metered/network leaves.
 
 [project]
 name = "nameless-knowledge-pipeline"
-version = "0.4.0"
-description = "Nameless offline knowledge pipeline — tutorial ingestion + cited claim mining (extraction-only, consensus/conflict cross-reference)."
+version = "0.5.0"
+description = "Nameless offline knowledge pipeline — tutorial ingestion + cited claim mining + layered skill synthesis behind a hard citation gate."
 requires-python = ">=3.11,<3.13"   # STACK.md: 3.11/3.12 (broad wheel availability; ctranslate2/faster-whisper lag 3.13)
 dependencies = [
     "pydantic>=2.7,<3",            # typed boundaries for every domain model — the only hard base dep
@@ -43,9 +44,9 @@ ingest = [
 asr = [
     "faster-whisper>=1.1,<2",          # large-v3 / large-v3-turbo; 4x faster than openai/whisper, int8 on CPU
 ]
-# ---- REAL claim extractor (Claude tool-use). ENV-GATED: needs ANTHROPIC_API_KEY + tokens. PIN before use. ----
+# ---- REAL claim extractor + skill synthesizer (Claude tool-use). ENV-GATED: ANTHROPIC_API_KEY + tokens. ----
 extract = [
-    "anthropic>=0.40,<1",              # messages tool-use; model claude-opus-4-8 (see prompts.py / README cost note)
+    "anthropic>=0.40,<1",              # messages tool-use; claude-opus-4-8 — Phase-4 emit_claims + Phase-5 emit_skill
 ]
 # ---- REAL semantic-dedup similarity (optional refinement). Heavy (torch); pin before use. ----
 embed = [
@@ -57,9 +58,10 @@ dev = [
 
 [project.scripts]
 # Phase 3: `corpus discover | ingest | list | show | stats`.  Phase 4: `claims mine | list | show | stats`.
-# Both compact-by-construction (token strategy).
+# Phase 5: `skills synthesize | list | show | audit | promote | stats`.  All compact-by-construction.
 corpus = "knowledge_pipeline.cli:main"
 claims = "knowledge_pipeline.claims_cli:main"
+skills = "knowledge_pipeline.skills_cli:main"
 
 [build-system]
 requires = ["hatchling"]

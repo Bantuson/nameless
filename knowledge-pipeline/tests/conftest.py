@@ -124,6 +124,125 @@ def claim_corpus():
     return load_claim_fixtures()
 
 
+# ============================================================================================
+# Phase-5 helpers (skill synthesis) — all over the fakes (pydantic + stdlib only).
+# ============================================================================================
+
+import datetime as _dt  # noqa: E402
+
+from knowledge_pipeline.adapters import FakeSkillSynthesizer, InMemorySkillStore  # noqa: E402
+from knowledge_pipeline.domain.skills import (  # noqa: E402
+    ProductionCell,
+    SectionKind,
+    SkillCitation,
+    SkillDraft,
+    SkillSection,
+)
+from knowledge_pipeline.synthesis_pipeline import SynthesisPipeline  # noqa: E402
+
+FIXED_NOW = _dt.datetime(2026, 6, 28, tzinfo=_dt.timezone.utc)
+
+
+def mine_fixture_claim_layer():
+    """Mine the bundled claim fixtures into (claim_store, corpus, snapshots) for Phase-5 tests.
+
+    Reuses the Phase-4 mining flow over the fakes, so the Phase-5 input is the REAL cross-referenced
+    consensus/conflict layer (not hand-built clusters) — the genuine extract->synthesize seam.
+    """
+    corpus = InMemoryCorpusStore()
+    clock = FakeClock()
+    snapshots: dict[str, RawTranscript] = {}
+    claim_corpus = load_claim_fixtures()
+    for vid, transcript in claim_corpus.transcripts.items():
+        corpus.write_snapshot(transcript, snapshot_record(transcript, clock.now()))
+        snapshots[vid] = transcript
+    store = InMemoryClaimStore()
+    MiningPipeline(
+        FakeClaimExtractor(scripted=claim_corpus.scripted), store, corpus, similarity=KeywordSimilarityIndex()
+    ).mine([MineTarget(video_id=v, genres=claim_corpus.genres.get(v, [])) for v in claim_corpus.video_ids])
+    return store, corpus, snapshots
+
+
+@pytest.fixture
+def claim_layer():
+    """``(claim_store, corpus, snapshots)`` — the mined Phase-4 layer Phase 5 synthesizes over."""
+    return mine_fixture_claim_layer()
+
+
+@pytest.fixture
+def synthesis_plane(claim_layer):
+    """A SynthesisPipeline wired over fakes: fake synthesizer + in-mem skill store + mined claim layer.
+
+    Returns ``(pipeline, skill_store, claim_store, corpus)`` — drives select -> synthesize -> GATE ->
+    emit -> store with no API, no tokens, no DB.
+    """
+    claim_store, corpus, _snapshots = claim_layer
+    skill_store = InMemorySkillStore()
+    pipeline = SynthesisPipeline(
+        FakeSkillSynthesizer(), skill_store, claim_store, corpus=corpus, now=lambda: FIXED_NOW
+    )
+    return pipeline, skill_store, claim_store, corpus
+
+
+def make_cell(stage: str = "bassline", genre: str = "deep-house") -> ProductionCell:
+    return ProductionCell(stage=stage, genre=genre)
+
+
+def make_citation(claim, *, stance: str | None = None) -> SkillCitation:
+    """A SkillCitation that mirrors a real Claim (so the gate's quote-match + number checks pass)."""
+    return SkillCitation(
+        claim_id=claim.id,
+        source_video_id=claim.source_video_id,
+        timestamp_ms=claim.timestamp_ms,
+        quote=claim.quote,
+        technique=claim.technique,
+        stance=stance if stance is not None else claim.stance,
+    )
+
+
+def make_section(
+    claims: list,
+    *,
+    kind: SectionKind = SectionKind.CONSENSUS,
+    body: str | None = None,
+    stance: str | None = None,
+) -> SkillSection:
+    """Build a section from real claims (body defaults to their joined claim_text => self-grounded)."""
+    first = claims[0]
+    return SkillSection(
+        kind=kind,
+        topic=first.topic,
+        technique=first.technique,
+        stage=first.stage,
+        genre=list(first.genre),
+        stance=stance,
+        body=body if body is not None else " ".join(c.claim_text for c in claims),
+        citations=[make_citation(c, stance=stance) for c in claims],
+        distinct_sources=len({c.source_video_id for c in claims}),
+    )
+
+
+def make_draft(
+    default_claims: list,
+    *,
+    cell: ProductionCell | None = None,
+    sections: list[SkillSection] | None = None,
+    default_body: str | None = None,
+    default_stance: str | None = None,
+) -> SkillDraft:
+    """Assemble a SkillDraft from real claims — the PASS baseline that gate tests then mutate to REJECT."""
+    cell = cell or make_cell()
+    default = make_section(default_claims, kind=SectionKind.DEFAULT, body=default_body, stance=default_stance)
+    return SkillDraft(
+        cell=cell,
+        name=cell.slug,
+        description="test skill",
+        default=default,
+        sections=sections if sections is not None else [],
+        prompt_version="test/v1",
+    )
+
+
 @pytest.fixture
 def mining_plane(claim_corpus):
     """A MiningPipeline wired over fakes: in-memory corpus of fixture snapshots + fake extractor + in-mem store.

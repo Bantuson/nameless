@@ -26,6 +26,7 @@ import re
 _NON_KEY = re.compile(r"[^a-z0-9]+")
 _WS = re.compile(r"\s+")
 _WORD = re.compile(r"[a-z0-9][a-z0-9'\-]*")
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 
 def normalize_text(text: str) -> str:
@@ -42,6 +43,27 @@ def normalize_text(text: str) -> str:
 def tokens(text: str) -> list[str]:
     """Lowercased word tokens (hyphenated craft terms like ``high-pass`` preserved). Pure."""
     return _WORD.findall(text.lower())
+
+
+def _norm_number(token: str) -> str:
+    """Canonicalize a numeric token so ``030`` == ``30`` and ``30.0`` == ``30``. Pure."""
+    if "." in token:
+        token = token.rstrip("0").rstrip(".")
+    return token.lstrip("0") or "0"
+
+
+def numbers(text: str) -> set[str]:
+    """Every numeric token (int/decimal) in ``text``, canonicalized. Pure.
+
+    The kernel of Phase 5's invented-number gate (KNOW-08): a producer parameter — ``300`` (Hz),
+    ``-6`` (dB), ``120`` (BPM), ``808`` — is load-bearing craft. The gate extracts the numbers a skill
+    *asserts* and demands every one of them also appear in a CITED source quote; a confident-sounding
+    value present nowhere in the evidence ("high-pass at 40 Hz" when no source said 40) is the single
+    worst GIGO failure, and surfacing it as a set difference makes the reject mechanical, not a judgment
+    call. We compare the magnitude only (``30`` from "30 Hz") because the unit travels in the prose, not
+    the number — so "30 hz" in a quote grounds "30 Hz" in the skill, but a wrong magnitude never passes.
+    """
+    return {_norm_number(n) for n in _NUMBER.findall(text)}
 
 
 def normalize_key(value: str | None) -> str:

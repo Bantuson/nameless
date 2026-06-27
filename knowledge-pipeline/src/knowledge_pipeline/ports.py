@@ -22,7 +22,7 @@ Mirrors the Phase-2 ``workers/`` pattern (ports + real+fake adapters + lazy heav
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Iterable, Optional, Protocol, runtime_checkable
+from typing import Iterable, Optional, Protocol, Sequence, runtime_checkable
 
 from .domain.claims import Claim, ClaimCluster, ClaimStats
 from .domain.models import (
@@ -35,6 +35,7 @@ from .domain.models import (
     VideoRef,
     Verdict,
 )
+from .domain.skills import AuthoredSkill, ProductionCell, SkillDraft, SkillStats, SkillStatus
 
 
 @runtime_checkable
@@ -225,6 +226,62 @@ class ClaimStore(Protocol):
     def stats(self) -> ClaimStats: ...
 
 
+# ============================================================================================
+# Phase-5 ports — skill synthesis + authored-skill persistence (KNOW-07/08/09/11). Same discipline:
+# the REAL SkillSynthesizer is Claude (heavy import LAZY, env-gated); its FAKE is a deterministic
+# template. SynthesisPipeline depends only on these protocols. The citation GATE is a pure function, not
+# a port — it must run identically for the real and fake synthesizer (you never want a "fake gate").
+# ============================================================================================
+
+
+@runtime_checkable
+class SkillSynthesizer(Protocol):
+    """Author a layered :class:`SkillDraft` for one cell over its clusters (KNOW-07).
+
+    The real adapter is Claude (Anthropic SDK) with forced ``emit_skill`` tool-use, constrained by the
+    versioned synthesis prompt to synthesize ONLY over the provided claims and never invent a number; its
+    output is re-grounded (citations rebuilt from the real claims) and then must still pass the citation
+    gate. The SDK import is LAZY and the call is env-gated. The fake is the deterministic
+    :func:`~knowledge_pipeline.pure.synthesis_template.template_synthesize` — structurally incapable of
+    introducing a claim/number not in ``clusters`` — so the whole synthesis flow runs in tests with no API.
+    """
+
+    def synthesize(self, cell: ProductionCell, clusters: Sequence[ClaimCluster]) -> SkillDraft: ...
+
+
+@runtime_checkable
+class SkillStore(Protocol):
+    """Persist + query authored skills and their draft/promoted status (KNOW-09/11).
+
+    Real = filesystem (``skills/production/<stage>/<genre>/SKILL.md``) + a registry extending
+    ``registry.sqlite``; fake = in-memory. ``upsert_skill`` is idempotent on the cell-addressed skill id
+    (re-synthesis replaces in place). ``set_status`` is the ONLY status mutator — the human-gated
+    ``draft -> promoted`` transition flows through it (and rewrites the file's frontmatter banner).
+    """
+
+    def init_schema(self) -> None: ...
+
+    def upsert_skill(self, skill: AuthoredSkill) -> None:
+        """Insert/replace a skill by id; the filesystem adapter also (re)writes its SKILL.md file."""
+        ...
+
+    def get_skill(self, skill_id: str) -> Optional[AuthoredSkill]: ...
+
+    def set_status(self, skill_id: str, status: SkillStatus) -> Optional[AuthoredSkill]:
+        """Flip a skill's status (the human-gated promotion); returns the updated skill or ``None``."""
+        ...
+
+    def list_skills(
+        self,
+        *,
+        stage: Optional[str] = None,
+        genre: Optional[str] = None,
+        status: Optional[SkillStatus] = None,
+    ) -> list[AuthoredSkill]: ...
+
+    def stats(self) -> SkillStats: ...
+
+
 # Convenience: the ports each plane needs, documented in one place.
 __all__ = [
     # Phase 3 — ingestion
@@ -238,4 +295,7 @@ __all__ = [
     "ClaimExtractor",
     "SimilarityIndex",
     "ClaimStore",
+    # Phase 5 — skill synthesis
+    "SkillSynthesizer",
+    "SkillStore",
 ]
