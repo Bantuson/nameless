@@ -1,0 +1,28 @@
+[package]
+name = "nameless-adapters"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Concrete adapters behind the nameless-core ports. Default features are pure-Rust (filesystem/in-memory/symphonia); the heavy Postgres/S3 leaf is behind the non-default `postgres` feature."
+
+[dependencies]
+nameless-core = { path = "../nameless-core" }
+
+# --- default (lean) adapter deps: pure-Rust, fit the 4GB budget, no async runtime ---
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+symphonia.workspace = true
+
+# --- heavy leaf: pulled ONLY by the `postgres` feature (all optional) ---
+tokio = { workspace = true, optional = true }
+sqlx = { workspace = true, optional = true }
+sqlxmq = { workspace = true, optional = true }
+rust-s3 = { workspace = true, optional = true }
+
+[features]
+default = []
+# Enables the production Postgres repo, durable sqlxmq queue, and S3/R2 object store.
+# Heavy (tokio + sqlx + sqlxmq + S3) — may OOM on a 4GB box; build on a real dev machine.
+postgres = ["dep:tokio", "dep:sqlx", "dep:sqlxmq", "dep:rust-s3"]
