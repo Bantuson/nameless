@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Cited Claim Mining + Cross-Reference
+current_phase: 5
+current_phase_name: Synthesize + Verify the First Authored Skills
 status: executing
-stopped_at: Phase 3 verified (77 RAM-safe tests pass) — starting Phase 4 (Cited Claim Mining)
+stopped_at: Phase 4 verified (134 RAM-safe tests pass) — starting Phase 5 (Synthesize + citation gate + Skills)
 last_updated: "2026-06-27T21:17:05.662Z"
 last_activity: 2026-06-27
 last_activity_desc: Phase 1 implemented — 3-crate Rust control plane (ports/adapters + typed state machine + content-hash storage + job queue + CLI + postgres-feature leaf)

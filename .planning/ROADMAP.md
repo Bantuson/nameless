@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Typed Capture Spine** - Capture a fragment into the durable typed graph; storage, state machine, CLI, and job queue (completed 2026-06-27)
 - [x] **Phase 2: Fragment Analysis** - A captured fragment reaches `analyzed` with features + embeddings, searchable by audio/note ✓ (58 tests pass; course-mode)
 - [x] **Phase 3: Tutorial Ingestion + Snapshot Corpus** - Ingest 100+ north-star tutorials into a snapshotted, extractability-scored corpus ✓ (77 tests pass; course-mode)
-- [ ] **Phase 4: Cited Claim Mining + Cross-Reference** - Extract atomic, individually-cited claims and preserve consensus/conflict as first-class data
+- [x] **Phase 4: Cited Claim Mining + Cross-Reference** - Extract atomic, individually-cited claims and preserve consensus/conflict as first-class data ✓ (134 tests pass; course-mode)
 - [ ] **Phase 5: Synthesize + Verify the First Authored Skills** - Synthesize only over the claim set into layered, citation-verified SKILL.md for the P1 cells
 - [ ] **Phase 6: Sparse-Genre Grounding** - Author a confidence-labeled alt-piano skill from parent-technique decomposition + real released-track audio
 - [ ] **Phase 7: Reference-Track Context** - Upload a finished song; get its vibe + non-melodic sonic targets, with cloning structurally impossible
@@ -177,7 +177,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Typed Capture Spine | 5/4 | Complete   | 2026-06-27 |
 | 2. Fragment Analysis | 1/1 | ✓ Complete (58 tests) | 2026-06-27 |
 | 3. Tutorial Ingestion + Snapshot Corpus | 1/1 | ✓ Complete (77 tests) | 2026-06-28 |
-| 4. Cited Claim Mining + Cross-Reference | 0/TBD | Not started | - |
+| 4. Cited Claim Mining + Cross-Reference | 1/1 | ✓ Complete (134 tests) | 2026-06-28 |
 | 5. Synthesize + Verify the First Authored Skills | 0/TBD | Not started | - |
 | 6. Sparse-Genre Grounding | 0/TBD | Not started | - |
 | 7. Reference-Track Context | 0/TBD | Not started | - |
