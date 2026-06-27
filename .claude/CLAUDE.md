@@ -197,7 +197,11 @@ This project builds the full Nameless system described in `nameless-prd.md`, wit
 
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+**Canonical: `.planning/ENGINEERING-PRINCIPLES.md` (read it before planning or writing code).**
+
+- **Course/learning build, code-complete but NOT run here.** The dev machine (~4GB RAM, no Docker, no Rust/C++ toolchain) won't compile/run this. Deliver complete, real, end-to-end code for every phase (Rust, Python/ML, TS/React) anyway. Never gate progress on compiling/running/installing. "Verify" = review + completeness + traceability + **tests that exist** (written, not executed here); flag anything needing real hardware/credentials as env-gated with the exact command.
+- **Testability is law (every phase, forever):** dependency injection / ports-and-adapters (every DB, ML model, network, queue, clock, RNG behind a trait/interface with a real adapter + a test fake); pure functions for core logic; separation of concerns; loose coupling.
+- **Go deep on ML as a teaching subject** — ML/DSP phases ship a `LEARNING.md` explaining the technique, the math, why, trade-offs, and references.
 <!-- GSD:conventions-end -->
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->

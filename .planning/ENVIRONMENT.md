@@ -4,6 +4,8 @@
 
 This file is authoritative for HOW phases are built and verified on this machine. Every phase's discuss / plan / execute / verify must respect it. It does NOT change WHAT the project is — only the local verification strategy.
 
+> **Build mode (supersedes "verify by running"): course / learning project — code-complete, NOT run here.** See `.planning/ENGINEERING-PRINCIPLES.md` (canonical). Deliver complete, real, end-to-end code for every phase (incl. Rust + ML) even though this 4GB/no-Docker/no-Rust machine won't compile or run it. Do NOT gate progress on compiling/running/installing. "Verify" = code review + completeness + traceability + **tests that EXIST** (written, not executed here). Testability is law (DI/ports-and-adapters, pure functions, separation of concerns, loose coupling). ML phases ship `LEARNING.md`. The table below still defines which heavy leaves get test-doubles vs. real adapters; "Verify here (RAM-safe)" now means "tests written against the fake," not "tests executed."
+
 ## Dev machine ground truth
 
 - **OS:** Windows 11 — PowerShell (primary) + Git Bash available.

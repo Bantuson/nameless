@@ -94,6 +94,8 @@ Translate the music in your head into genuinely *good* output. Two grounding for
 | Reference track = vibe/atmosphere + measurable non-melodic sonic targets, strictly non-cloning | A finished song is better context than a description; intent translation, not imitation | — Pending |
 | Uploaded tracks = persistent stem library; any stem promotable to an attributed sample anytime | Attribution-clean sampling is more honest than copy-and-claim-original | — Pending |
 | Export produces a credits sheet for all samples used | Surfaces lineage and attribution honestly | — Pending |
+| Build as a course/learning project: complete end-to-end code (incl. deep ML), NOT run on the dev machine | 4GB/no-Docker/no-Rust box can't run it; user wants to learn the craft and own a real codebase | — Pending |
+| Testability-first as a persistent law: DI/ports-and-adapters, pure functions, separation of concerns, loose coupling | Makes the code teachable, reviewable, and genuinely testable even unrun; holds across phases/sessions/milestones | — Pending |
 
 ## Evolution
 
