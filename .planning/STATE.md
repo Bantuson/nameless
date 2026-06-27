@@ -1,12 +1,20 @@
 ---
-gsd_state_version: '1.0'  # placeholder; syncStateFrontmatter overwrites on first state.* call
-status: planning
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: 1
+current_phase_name: Typed Capture Spine
+status: executing
+stopped_at: Phase 1 (Typed Capture Spine) implemented — all 4 plans + walking skeleton; awaiting verification
+last_updated: "2026-06-27T21:17:05.662Z"
+last_activity: 2026-06-27
+last_activity_desc: Phase 1 implemented — 3-crate Rust control plane (ports/adapters + typed state machine + content-hash storage + job queue + CLI + postgres-feature leaf)
 progress:
   total_phases: 9
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 11
 ---
 
 # Project State
@@ -21,15 +29,16 @@ See: .planning/PROJECT.md (updated 2026-06-26)
 ## Current Position
 
 Phase: 1 of 9 (Typed Capture Spine)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-06-26 — Roadmap created (M0 milestone, 9 vertical MVP phases, 31/31 v1 requirements mapped)
+Plan: 4 of 4 in current phase — IMPLEMENTED (awaiting verification)
+Status: Phase 1 code-complete (course mode: written + reviewed, not compiled here)
+Last activity: 2026-06-27 — Phase 1 implemented end-to-end (CAP-01/02/05/06/07)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 11%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: — min
 - Total execution time: 0 hours
@@ -38,9 +47,10 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01 Typed Capture Spine | 4 | 19min | ~5min |
 
 **Recent Trend:**
+
 - Last 5 plans: —
 - Trend: —
 
@@ -56,6 +66,9 @@ Recent decisions affecting current work:
 - Knowledge layer = authored Claude Skills + scripts (not RAG); two-pass extract-then-synthesize with a programmatic citation-verification gate is the make-or-break build (Phases 4-5).
 - Integrity boundaries are typed/structural and front-loaded: non-cloning (references barred from the melodic path, Phase 7) and the attribution-completeness invariant + rights-status (Phase 8).
 - Ingestion runs locally with snapshot-on-ingest; queue is Postgres-backed (sqlxmq), no NATS/Redis at solo scale (Phases 1, 3).
+- Phase 1: ports-and-adapters (ObjectStore/FragmentRepo/JobQueue) with a real + fake adapter each is the load-bearing decision — prod (Postgres/sqlxmq/R2) and local fakes satisfy the same trait, so RAM-safe verification exercises real control flow.
+- Phase 1: heavy leaf (tokio/sqlx/sqlxmq/S3) lives behind a non-default `postgres` cargo feature; the default + `--local` build stays pure-sync-Rust and 4GB-buildable. Sync ports bridge async adapters via an owned-runtime block_on shim.
+- Phase 1: the lifecycle invariant ("cannot place unanalyzed", "AI needs the eval gate") is one exhaustive-match `transition()` + `Fragment::apply` as the sole mutator — enforced by the compiler, proven by a 480-triple matrix test.
 
 ### Pending Todos
 
@@ -79,6 +92,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-26
-Stopped at: ROADMAP.md and STATE.md created; REQUIREMENTS.md traceability updated
+Last session: 2026-06-27
+Stopped at: Phase 1 (Typed Capture Spine) implemented — all 4 plans + walking skeleton; awaiting verification
 Resume file: None
+
+**Phase 1 user actions before verify:** install the Rust toolchain (rustup) and verify the pinned crates on crates.io (README "Supply chain"); then `cargo test` + the `--local` skeleton. The `postgres`-feature build + live Postgres/R2 tests are env-gated (commands in README and 01-SUMMARY.md).

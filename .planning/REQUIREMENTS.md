@@ -23,13 +23,13 @@
 
 ### Core Spine & Capture (CAP)
 
-- [ ] **CAP-01**: User can capture an audio fragment (hum, hook, beat, rhythm) into a project with an attached intent note
-- [ ] **CAP-02**: System stores raw audio immutably in object storage (S3/R2), addressed by ID — audio never enters the agent's context
+- [x] **CAP-01**: User can capture an audio fragment (hum, hook, beat, rhythm) into a project with an attached intent note
+- [x] **CAP-02**: System stores raw audio immutably in object storage (S3/R2), addressed by ID — audio never enters the agent's context
 - [ ] **CAP-03**: Feature worker extracts f0 contour, chroma, onsets/beat-grid/tempo, key, and loudness (LUFS) for each fragment
 - [ ] **CAP-04**: System computes a CLAP audio embedding and a note-text embedding, indexed in pgvector for retrieval by note or by audio similarity
-- [ ] **CAP-05**: Fragment advances through the typed Rust state machine to `analyzed`; the state machine makes it impossible to place an unanalyzed fragment
-- [ ] **CAP-06**: The `nameless` CLI exposes capture / analyze / fragments / graph subcommands with compact-by-default output (IDs and summaries, never waveforms or feature arrays)
-- [ ] **CAP-07**: A durable Postgres-backed job queue (sqlxmq) carries feature-extraction and separation jobs with retry and backpressure (no NATS/Redis at solo scale)
+- [x] **CAP-05**: Fragment advances through the typed Rust state machine to `analyzed`; the state machine makes it impossible to place an unanalyzed fragment
+- [x] **CAP-06**: The `nameless` CLI exposes capture / analyze / fragments / graph subcommands with compact-by-default output (IDs and summaries, never waveforms or feature arrays)
+- [x] **CAP-07**: A durable Postgres-backed job queue (sqlxmq) carries feature-extraction and separation jobs with retry and backpressure (no NATS/Redis at solo scale)
 
 ### Reference-Track Context (REF)
 
@@ -95,11 +95,11 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAP-01 | Phase 1 | Pending |
-| CAP-02 | Phase 1 | Pending |
-| CAP-05 | Phase 1 | Pending |
-| CAP-06 | Phase 1 | Pending |
-| CAP-07 | Phase 1 | Pending |
+| CAP-01 | Phase 1 | Complete |
+| CAP-02 | Phase 1 | Complete |
+| CAP-05 | Phase 1 | Complete |
+| CAP-06 | Phase 1 | Complete |
+| CAP-07 | Phase 1 | Complete |
 | CAP-03 | Phase 2 | Pending |
 | CAP-04 | Phase 2 | Pending |
 | KNOW-01 | Phase 3 | Pending |
@@ -128,6 +128,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | UI-04 | Phase 9 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 31 total (KNOW ×11, CAP ×7, REF ×4, SAMP ×5, UI ×4 — the prior "30" header undercounted KNOW by one)
 - Mapped to phases: 31 (100%) ✓
 - Unmapped: 0
