@@ -1,0 +1,31 @@
+{
+  "video": {
+    "video_id": "amapiano_mixing_auto_noisy",
+    "title": "Amapiano mixing tutorial - full mixdown",
+    "channel": "Private School Mixing",
+    "duration_s": 900,
+    "genre": "amapiano",
+    "stage": "mixing"
+  },
+  "captions": {
+    "has_manual": false,
+    "has_auto": true,
+    "auto_quality": 0.2,
+    "caption_source": "auto",
+    "language": "en",
+    "segments": [
+      {"start_s": 3.0, "duration_s": 5.0, "text": "yeah so um the log the the lock drama you know"},
+      {"start_s": 9.0, "duration_s": 5.0, "text": "you wanna kinda like serato the thing on the on the"},
+      {"start_s": 15.0, "duration_s": 5.0, "text": "three hundred hurts or whatever it just sits"}
+    ]
+  },
+  "asr": {
+    "language": "en",
+    "segments": [
+      {"start_s": 0.0, "duration_s": 7.0, "text": "First, gain stage every channel so nothing clips before you start the mixdown."},
+      {"start_s": 7.5, "duration_s": 7.0, "text": "Cut around 300 hz on the log drum to remove the mud and high-pass the pads at 250 hz."},
+      {"start_s": 15.0, "duration_s": 7.0, "text": "Glue the drum bus with a compressor at a 2 to 1 ratio and a slow attack."},
+      {"start_s": 22.5, "duration_s": 7.0, "text": "Send everything to a reverb bus and automate the master level down two db in the breakdown."}
+    ]
+  }
+}

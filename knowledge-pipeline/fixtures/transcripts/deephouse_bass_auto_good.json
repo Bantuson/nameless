@@ -1,0 +1,24 @@
+{
+  "video": {
+    "video_id": "deephouse_bass_auto_good",
+    "title": "Deep house bassline tutorial - rolling sub",
+    "channel": "Night Sessions",
+    "duration_s": 540,
+    "genre": "deep-house",
+    "stage": "bassline"
+  },
+  "captions": {
+    "has_manual": false,
+    "has_auto": true,
+    "auto_quality": 0.65,
+    "caption_source": "auto",
+    "language": "en",
+    "segments": [
+      {"start_s": 5.0, "duration_s": 6.0, "text": "we are going to roll off the low end of the bass around 30 hz to keep it tight"},
+      {"start_s": 12.0, "duration_s": 6.0, "text": "then add a little sidechain compression triggered from the kick drum"},
+      {"start_s": 19.0, "duration_s": 6.0, "text": "keep the sub bass in mono below 120 hz and widen the pads above it"},
+      {"start_s": 26.0, "duration_s": 6.0, "text": "automate the filter cutoff to open up slowly over eight bars for movement"},
+      {"start_s": 33.0, "duration_s": 6.0, "text": "saturate the bass gently and boost around 800 hz so it cuts on small speakers"}
+    ]
+  }
+}

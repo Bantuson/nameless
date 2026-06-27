@@ -1,0 +1,28 @@
+{
+  "video": {
+    "video_id": "rnb_vocal_no_captions",
+    "title": "Sonder style vocal layering breakdown",
+    "channel": "Latenight Vocals",
+    "duration_s": 600,
+    "genre": "rnb",
+    "stage": "vocal-layering",
+    "artist_anchor": "Sonder"
+  },
+  "captions": {
+    "has_manual": false,
+    "has_auto": false,
+    "auto_quality": null,
+    "caption_source": "none",
+    "language": "en",
+    "segments": []
+  },
+  "asr": {
+    "language": "en",
+    "segments": [
+      {"start_s": 0.0, "duration_s": 7.0, "text": "Record the lead vocal first, then double it and pan the two copies hard left and right."},
+      {"start_s": 7.5, "duration_s": 7.0, "text": "Stack three harmonies a third above the lead and high-pass them around 200 hz."},
+      {"start_s": 15.0, "duration_s": 7.0, "text": "Add a short reverb on the adlibs and automate the delay throws on the last word of each line."},
+      {"start_s": 22.5, "duration_s": 7.0, "text": "Compress the vocal bus gently with a 3 to 1 ratio and boost a little air at 12 khz."}
+    ]
+  }
+}

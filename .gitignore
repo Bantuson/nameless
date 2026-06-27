@@ -18,6 +18,15 @@ workers/build/
 # Local `--local` profile store (filesystem object store + JSON fragment db)
 .nameless-local/
 
+# knowledge-pipeline build-time corpus (registry.sqlite + snapshots) + offline demo output
+.nameless-knowledge/
+knowledge-pipeline/.venv/
+knowledge-pipeline/dist/
+knowledge-pipeline/build/
+knowledge-pipeline/demo-corpus/
+**/registry.sqlite
+**/registry.sqlite-*
+
 # Secrets — only .env.example is committed
 .env
 

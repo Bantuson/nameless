@@ -1,0 +1,28 @@
+{
+  "video": {
+    "video_id": "amapiano_drums_rich",
+    "title": "Amapiano log drum tutorial - groove and bounce",
+    "channel": "Lowbass Academy",
+    "duration_s": 720,
+    "genre": "amapiano",
+    "stage": "drums",
+    "artist_anchor": "Lowbass Djy"
+  },
+  "captions": {
+    "has_manual": true,
+    "has_auto": true,
+    "auto_quality": 0.7,
+    "caption_source": "manual",
+    "language": "en",
+    "segments": [
+      {"start_s": 6.0, "duration_s": 6.0, "text": "Let's start with the log drum. I'm going to high-pass it around 40 hz to clean up the low end."},
+      {"start_s": 13.0, "duration_s": 6.0, "text": "Now sidechain the bass to the kick so the sub breathes underneath the groove."},
+      {"start_s": 20.0, "duration_s": 6.0, "text": "Set the compressor attack fast and the release to about 120 ms so it pumps in time."},
+      {"start_s": 27.0, "duration_s": 5.0, "text": "Layer a shaker on the off-beats and pan it slightly to the left for width."},
+      {"start_s": 33.0, "duration_s": 5.0, "text": "Add a clap on the third beat, then compress the drum bus with a 4 to 1 ratio."},
+      {"start_s": 39.0, "duration_s": 6.0, "text": "Boost around 3 khz on the snare for presence and roll off everything below 200 hz."},
+      {"start_s": 46.0, "duration_s": 6.0, "text": "Quantize the hi-hats to a 16th swing of about 58 percent to get that amapiano bounce."},
+      {"start_s": 53.0, "duration_s": 6.0, "text": "Finally, automate the log drum volume so it ducks two db under each vocal phrase."}
+    ]
+  }
+}

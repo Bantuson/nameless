@@ -1,0 +1,23 @@
+{
+  "video": {
+    "video_id": "deephouse_atmosphere_sparse",
+    "title": "Deep house vibes - chill session vlog",
+    "channel": "Sunset Tapes",
+    "duration_s": 660,
+    "genre": "deep-house",
+    "stage": "atmosphere"
+  },
+  "captions": {
+    "has_manual": true,
+    "has_auto": false,
+    "auto_quality": null,
+    "caption_source": "manual",
+    "language": "en",
+    "segments": [
+      {"start_s": 10.0, "duration_s": 8.0, "text": "Yeah man this beat is so clean, I love this vibe."},
+      {"start_s": 30.0, "duration_s": 8.0, "text": "Shout out to everyone watching, appreciate the support."},
+      {"start_s": 90.0, "duration_s": 8.0, "text": "It's a Sunday, the weather is nice, let's just enjoy the music."},
+      {"start_s": 200.0, "duration_s": 8.0, "text": "So smooth, so warm, that is the whole feeling right there."}
+    ]
+  }
+}

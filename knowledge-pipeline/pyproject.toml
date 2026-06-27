@@ -1,0 +1,60 @@
+# Nameless — offline knowledge pipeline, ingestion stage (Phase 3: Tutorial Ingestion + Snapshot Corpus).
+#
+# This is a BUILD-TIME authoring tool, NOT a runtime plane (research ARCHITECTURE.md): a sibling of
+# `workers/` that discovers production tutorials, fetches transcripts locally (throttled), snapshots
+# them on ingest, scores their extractability, and registers everything in a LOCAL `registry.sqlite`
+# (deliberately OFF the runtime Postgres — the two knowledge layers share no tables, no read path).
+#
+# Managed with `uv`. PINS versions per .planning/research/STACK.md. It is NOT installed on the build
+# machine (4GB / no-Docker, and YouTube ingest must run from a home IP — see README "ToS / local-first").
+# Writing complete, correct code + tests against the FAKES is the deliverable; the user installs and runs
+# the real network/ASR paths later, env-gated (see README "Verification").
+#
+# Dependency tiers — deliberately layered so the FAKE tests need only a light base:
+#   * base ([project].dependencies)  — pydantic + stdlib (sqlite3/json/hashlib/pathlib). Enough to import
+#                                       the package, run every pure function, every fake, and the whole
+#                                       test suite (incl. the REAL FilesystemCorpusStore — sqlite3 is stdlib).
+#   * [ingest] — yt-dlp + youtube-transcript-api: the REAL DiscoverySource + TranscriptFetcher.
+#   * [asr]    — faster-whisper: the REAL ASR fallback Transcriber (pulls audio via yt-dlp from [ingest]).
+#   * [dev]    — pytest.
+# So `uv sync --extra dev` runs every fake test; `uv sync --extra ingest --extra asr` pulls the real leaf.
+
+[project]
+name = "nameless-knowledge-pipeline"
+version = "0.3.0"
+description = "Nameless offline knowledge pipeline — tutorial discovery, local transcript fetch + snapshot, extractability scoring, corpus registry."
+requires-python = ">=3.11,<3.13"   # STACK.md: 3.11/3.12 (broad wheel availability; ctranslate2/faster-whisper lag 3.13)
+dependencies = [
+    "pydantic>=2.7,<3",            # typed boundaries for every domain model — the only hard base dep
+]
+
+[project.optional-dependencies]
+# ---- REAL discovery + transcript fetch (network; run from a HOME IP — see README) ----
+# yt-dlp ships ~biweekly and YouTube changes break it periodically (STACK.md): PIN THE EXACT current
+# release before install and keep the smoke test. The range below is a floor; repin to an exact `==`.
+ingest = [
+    "yt-dlp>=2025.6,<2026",            # discovery (ytsearch) + subtitle/audio acquisition; PIN EXACT before use
+    "youtube-transcript-api>=1.0,<2",  # captions fast path (manual + auto); 1.x instance API
+]
+# ---- REAL ASR fallback (faster-whisper / CTranslate2). Needs [ingest] too (yt-dlp pulls the audio). ----
+asr = [
+    "faster-whisper>=1.1,<2",          # large-v3 / large-v3-turbo; 4x faster than openai/whisper, int8 on CPU
+]
+dev = [
+    "pytest>=8,<9",
+]
+
+[project.scripts]
+# The corpus CLI: `corpus discover | ingest | list | show`. Compact output by construction (token strategy).
+corpus = "knowledge_pipeline.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/knowledge_pipeline"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,26 @@
+{
+  "video": {
+    "video_id": "altpiano_visual_only",
+    "title": "Alternative piano amapiano - making this vibe",
+    "channel": "Vibes Only",
+    "duration_s": 480,
+    "genre": "alt-piano",
+    "stage": "chords",
+    "artist_anchor": "Ben Produces"
+  },
+  "captions": {
+    "has_manual": true,
+    "has_auto": false,
+    "auto_quality": null,
+    "caption_source": "manual",
+    "language": "en",
+    "segments": [
+      {"start_s": 4.0, "duration_s": 6.0, "text": "Okay so for this one we're just gonna do this, you see."},
+      {"start_s": 11.0, "duration_s": 6.0, "text": "As you can see I just drag this guy up here like that."},
+      {"start_s": 18.0, "duration_s": 6.0, "text": "And then you just do that, and boom, there you go."},
+      {"start_s": 25.0, "duration_s": 6.0, "text": "Right here, see, just like that, something like this."},
+      {"start_s": 32.0, "duration_s": 6.0, "text": "We do this over here and watch this, that's the whole sound."},
+      {"start_s": 39.0, "duration_s": 6.0, "text": "You just play it like this and it sounds amazing, do that."}
+    ]
+  }
+}
