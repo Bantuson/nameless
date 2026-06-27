@@ -1,0 +1,25 @@
+[package]
+name = "nameless-cli"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The `nameless` control-plane CLI: project/capture/fragments, compact-by-default."
+
+[[bin]]
+name = "nameless"
+path = "src/main.rs"
+
+[dependencies]
+nameless-core = { path = "../nameless-core" }
+nameless-adapters = { path = "../nameless-adapters" }
+clap.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[features]
+default = []
+# Enables the server profile (Postgres repo + sqlxmq queue + S3/R2 store) in `profile.rs`.
+# The default binary builds ONLY the `--local` profile, so it stays lean (no tokio/sqlx).
+postgres = ["nameless-adapters/postgres"]
