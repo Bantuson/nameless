@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 2
-current_phase_name: Fragment Analysis
+current_phase: 3
+current_phase_name: Tutorial Ingestion + Snapshot Corpus
 status: executing
-stopped_at: Phase 1 verified by review (course mode) — starting Phase 2 (Fragment Analysis)
+stopped_at: Phase 2 verified (58 RAM-safe tests pass) — starting Phase 3 (Tutorial Ingestion)
 last_updated: "2026-06-27T21:17:05.662Z"
 last_activity: 2026-06-27
 last_activity_desc: Phase 1 implemented — 3-crate Rust control plane (ports/adapters + typed state machine + content-hash storage + job queue + CLI + postgres-feature leaf)

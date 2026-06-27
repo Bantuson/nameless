@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Parallelization:** Phase 3 (knowledge ingestion) is independent of the core spine and can start day one. Phases 4-6 chain off Phase 3; Phase 6 also needs the Phase 2 audio pipeline. Phases 7-8 chain off the core spine. Phase 9 sits on top of Phases 2/7/8.
 
 - [x] **Phase 1: Typed Capture Spine** - Capture a fragment into the durable typed graph; storage, state machine, CLI, and job queue (completed 2026-06-27)
-- [ ] **Phase 2: Fragment Analysis** - A captured fragment reaches `analyzed` with features + embeddings, searchable by audio/note
+- [x] **Phase 2: Fragment Analysis** - A captured fragment reaches `analyzed` with features + embeddings, searchable by audio/note ✓ (58 tests pass; course-mode)
 - [ ] **Phase 3: Tutorial Ingestion + Snapshot Corpus** - Ingest 100+ north-star tutorials into a snapshotted, extractability-scored corpus
 - [ ] **Phase 4: Cited Claim Mining + Cross-Reference** - Extract atomic, individually-cited claims and preserve consensus/conflict as first-class data
 - [ ] **Phase 5: Synthesize + Verify the First Authored Skills** - Synthesize only over the claim set into layered, citation-verified SKILL.md for the P1 cells
@@ -175,7 +175,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Typed Capture Spine | 5/4 | Complete   | 2026-06-27 |
-| 2. Fragment Analysis | 0/TBD | Not started | - |
+| 2. Fragment Analysis | 1/1 | ✓ Complete (58 tests) | 2026-06-27 |
 | 3. Tutorial Ingestion + Snapshot Corpus | 0/TBD | Not started | - |
 | 4. Cited Claim Mining + Cross-Reference | 0/TBD | Not started | - |
 | 5. Synthesize + Verify the First Authored Skills | 0/TBD | Not started | - |
