@@ -25,8 +25,8 @@
 
 - [x] **CAP-01**: User can capture an audio fragment (hum, hook, beat, rhythm) into a project with an attached intent note
 - [x] **CAP-02**: System stores raw audio immutably in object storage (S3/R2), addressed by ID — audio never enters the agent's context
-- [ ] **CAP-03**: Feature worker extracts f0 contour, chroma, onsets/beat-grid/tempo, key, and loudness (LUFS) for each fragment
-- [ ] **CAP-04**: System computes a CLAP audio embedding and a note-text embedding, indexed in pgvector for retrieval by note or by audio similarity
+- [x] **CAP-03**: Feature worker extracts f0 contour, chroma, onsets/beat-grid/tempo, key, and loudness (LUFS) for each fragment
+- [x] **CAP-04**: System computes a CLAP audio embedding and a note-text embedding, indexed in pgvector for retrieval by note or by audio similarity
 - [x] **CAP-05**: Fragment advances through the typed Rust state machine to `analyzed`; the state machine makes it impossible to place an unanalyzed fragment
 - [x] **CAP-06**: The `nameless` CLI exposes capture / analyze / fragments / graph subcommands with compact-by-default output (IDs and summaries, never waveforms or feature arrays)
 - [x] **CAP-07**: A durable Postgres-backed job queue (sqlxmq) carries feature-extraction and separation jobs with retry and backpressure (no NATS/Redis at solo scale)
@@ -100,8 +100,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | CAP-05 | Phase 1 | Complete |
 | CAP-06 | Phase 1 | Complete |
 | CAP-07 | Phase 1 | Complete |
-| CAP-03 | Phase 2 | Pending |
-| CAP-04 | Phase 2 | Pending |
+| CAP-03 | Phase 2 | Complete |
+| CAP-04 | Phase 2 | Complete |
 | KNOW-01 | Phase 3 | Pending |
 | KNOW-02 | Phase 3 | Pending |
 | KNOW-03 | Phase 3 | Pending |

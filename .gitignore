@@ -3,6 +3,18 @@
 **/*.rs.bk
 *.swp
 
+# Python worker plane (workers/) — caches, venvs, build artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+workers/.venv/
+*.egg-info/
+workers/dist/
+workers/build/
+
 # Local `--local` profile store (filesystem object store + JSON fragment db)
 .nameless-local/
 

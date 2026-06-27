@@ -1,0 +1,59 @@
+# Nameless — Python worker plane (Phase 2: Fragment Analysis).
+#
+# Managed with `uv`. This file PINS versions per .planning/research/STACK.md; it is NOT installed
+# on the build machine (4GB / no-Docker — the heavy torch/librosa/CLAP stack would OOM). Writing
+# complete, correct code + tests against the FAKES is the deliverable. The user installs + runs the
+# real ML/Postgres paths later, env-gated (see workers/README.md "Verification").
+#
+# Dependency tiers — deliberately layered so the FAKE tests need only a light base:
+#   * base ([project].dependencies)   — pydantic + numpy. Enough to import the package, run the
+#                                        pure functions, the fakes, and the whole test suite.
+#   * [ml]  — librosa/torchcrepe/pyloudnorm/laion-clap/soundfile/torch: the REAL FeatureExtractor +
+#             Embedder. Heavy; CPU-fine for features, GPU-wanted for CLAP at volume.
+#   * [pg]  — psycopg + pgvector: the REAL FragmentRepo/FeatureStore over Postgres.
+#   * [dev] — pytest.
+# So `uv sync` (base+dev) runs every fake test; `uv sync --extra ml --extra pg` pulls the real leaf.
+
+[project]
+name = "nameless-workers"
+version = "0.2.0"
+description = "Nameless audio-ML worker plane — fragment feature extraction, CLAP embeddings, retrieval."
+requires-python = ">=3.11,<3.13"   # STACK.md: 3.11/3.12 (broad ML wheel availability; some lag 3.13)
+dependencies = [
+    "pydantic>=2.7,<3",            # typed boundaries for every domain model + the job envelope
+    "numpy>=1.26,<2.2",            # pure vector math, fake adapters, array carriers
+]
+
+[project.optional-dependencies]
+# ---- the REAL feature extractor + embedder (heavy; env-gated) ----
+ml = [
+    "librosa==0.11.0",            # chroma_cqt, onset, beat_track, frames_to_time
+    "soundfile>=0.12,<0.14",      # libsndfile decode of the raw bytes
+    "torch>=2.2,<2.6",            # torchcrepe + laion-clap backend
+    "torchcrepe>=0.0.23",         # f0 / pitch-contour tracking (CREPE)
+    "pyloudnorm==0.1.1",          # LUFS / integrated loudness (ITU-R BS.1770-4)
+    "laion-clap==1.1.7",          # joint audio-text embedding (pin the checkpoint too — see embed_clap.py)
+]
+# ---- the REAL Postgres + pgvector repo (env-gated) ----
+pg = [
+    "psycopg[binary]>=3.2,<4",    # Postgres driver (sync)
+    "pgvector>=0.3,<0.5",         # vector type adapter + cosine search
+]
+dev = [
+    "pytest>=8,<9",
+]
+
+[project.scripts]
+# The worker CLI. Mirrors the `nameless` surface: `nameless-workers fragments search …` / `analyze`.
+nameless-workers = "nameless_workers.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nameless_workers"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
