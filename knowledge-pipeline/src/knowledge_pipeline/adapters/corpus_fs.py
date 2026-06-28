@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -35,7 +36,7 @@ from ..domain.models import (
     Verdict,
     VideoRef,
 )
-from ..pure.snapshot import canonical_payload
+from ..pure.snapshot import canonical_payload, content_hash
 from ..registry_sql import CONNECT_PRAGMAS, DDL, SCHEMA_VERSION
 
 
@@ -45,6 +46,22 @@ def _iso(dt: _dt.datetime) -> str:
 
 def _parse_dt(s: str) -> _dt.datetime:
     return _dt.datetime.fromisoformat(s)
+
+
+# A ``video_id`` becomes a filesystem path component (``snapshots/<video_id>.json``). It is externally
+# sourced — yt-dlp metadata on write, and an arbitrary CLI argument (``corpus show <id>``) on read — so an
+# unvalidated value like ``../../../etc/cron.d/x`` (write) or ``../../../etc/passwd`` (read) would escape
+# the corpus root (``pathlib``'s ``/`` does NOT collapse ``..``, and a leading ``/`` resets to absolute).
+# Real YouTube ids are 11-char ``[A-Za-z0-9_-]``; we accept that shape (a little wider for synthetic test
+# ids) and reject anything else LOUDLY before it ever touches a path. CR-01.
+_SAFE_VIDEO_ID: re.Pattern[str] = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _safe_video_id(video_id: str) -> str:
+    """Return ``video_id`` iff it is a safe path component; else raise. Blocks path traversal (CR-01)."""
+    if not isinstance(video_id, str) or not _SAFE_VIDEO_ID.match(video_id):
+        raise ValueError(f"unsafe video_id (path-traversal guard): {video_id!r}")
+    return video_id
 
 
 class FilesystemCorpusStore:
@@ -101,7 +118,7 @@ class FilesystemCorpusStore:
         payload = canonical_payload(transcript)
         payload["content_sha256"] = record.content_sha256
         payload["retrieval_date"] = _iso(record.retrieval_date)
-        rel_path = f"snapshots/{transcript.video_id}.json"
+        rel_path = f"snapshots/{_safe_video_id(transcript.video_id)}.json"
         abs_path = self._root / rel_path
         abs_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -109,7 +126,7 @@ class FilesystemCorpusStore:
         return rel_path
 
     def load_snapshot(self, video_id: str) -> Optional[RawTranscript]:
-        abs_path = self._snapshots_dir / f"{video_id}.json"
+        abs_path = self._snapshots_dir / f"{_safe_video_id(video_id)}.json"
         if not abs_path.exists():
             return None
         payload = json.loads(abs_path.read_text(encoding="utf-8"))
@@ -121,13 +138,27 @@ class FilesystemCorpusStore:
             )
             for seg in payload.get("segments", [])
         ]
-        return RawTranscript(
+        transcript = RawTranscript(
             video_id=payload["video_id"],
             caption_source=CaptionSource(payload["caption_source"]),
             language=payload.get("language", "en"),
             fetched_via=payload.get("fetched_via", "unknown"),
             segments=segments,
         )
+        # WR-02: realize the integrity guarantee the SnapshotRecord docstring advertises. The snapshot
+        # file embeds the ``content_sha256`` computed at ingest; re-hash the reconstructed transcript and
+        # reject a file whose content no longer matches (tamper on disk, or drift if someone hand-edited
+        # the captured evidence). ``content_hash`` is over the same canonical payload, so an untouched
+        # snapshot always re-verifies; only a real mismatch raises.
+        stored = payload.get("content_sha256")
+        if stored is not None:
+            actual = content_hash(transcript)
+            if actual != stored:
+                raise ValueError(
+                    f"snapshot integrity check failed for {video_id!r}: stored sha256 {stored} "
+                    f"!= recomputed {actual} (tampered/drifted evidence file)"
+                )
+        return transcript
 
     # ---- registry upsert (one transaction across the three tables) ----
     def register(self, entry: CorpusEntry) -> None:
@@ -135,7 +166,7 @@ class FilesystemCorpusStore:
         v = entry.video
         s = entry.snapshot
         x = entry.extractability
-        rel_path = f"snapshots/{v.video_id}.json"
+        rel_path = f"snapshots/{_safe_video_id(v.video_id)}.json"
         with conn:  # transaction
             conn.execute(
                 """

@@ -143,6 +143,48 @@ def test_get_missing_returns_none(store):
     assert store.load_snapshot("nope") is None
 
 
+def test_malicious_video_id_is_rejected_before_touching_the_filesystem(tmp_path):
+    # CR-01: a crafted id must never escape the corpus root on write OR read. `pathlib`'s `/` does not
+    # collapse `..`, so without the guard `../../../etc/passwd` would be an arbitrary-file primitive.
+    root = tmp_path / "corpus"
+    store = FilesystemCorpusStore(root)
+    store.init_schema()
+    entry, transcript = _entry("a")
+    evil = entry.snapshot.model_copy(update={"video_id": "../../../../etc/cron.d/x"})
+    evil_transcript = transcript.model_copy(update={"video_id": "../../../../etc/cron.d/x"})
+
+    with pytest.raises(ValueError):
+        store.write_snapshot(evil_transcript, evil)
+    with pytest.raises(ValueError):
+        store.load_snapshot("../../../../etc/passwd")
+    # the snapshots dir contains nothing outside itself (no escape happened)
+    assert list((root / "snapshots").glob("*.json")) == []
+    store.close()
+
+
+def test_load_snapshot_detects_tampered_evidence_file(tmp_path):
+    # WR-02: the integrity guarantee the docstrings advertise is now real — a hand-edited snapshot file
+    # whose content no longer matches the stored sha256 is rejected on read.
+    import json
+
+    root = tmp_path / "corpus"
+    store = FilesystemCorpusStore(root)
+    store.init_schema()
+    entry, transcript = _entry("a")
+    store.write_snapshot(transcript, entry.snapshot)
+    store.register(entry)
+    assert store.load_snapshot("a") is not None  # untouched file re-verifies cleanly
+
+    snap_file = root / "snapshots" / "a.json"
+    payload = json.loads(snap_file.read_text(encoding="utf-8"))
+    payload["segments"][0]["text"] = "tampered: cut at 9000 hz"  # content drift, sha256 left stale
+    snap_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        store.load_snapshot("a")
+    store.close()
+
+
 def test_filesystem_store_persists_across_instances(tmp_path):
     # Reopen the same corpus dir with a fresh store ⇒ the registry + snapshot survive (durability).
     root = tmp_path / "corpus"

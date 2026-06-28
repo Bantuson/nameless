@@ -205,7 +205,8 @@ class SnapshotRecord(BaseModel):
     """Immutable evidence metadata captured AT INGEST — what makes a citation survive a takedown.
 
     The full timestamped segments live in the snapshot FILE (the store writes them); this record is the
-    compact, registry-stored fingerprint: the content ``sha256`` (so tampering/drift is detectable), the
+    compact, registry-stored fingerprint: the content ``sha256`` (so tampering/drift is detectable when
+    the snapshot file is re-read — ``load_snapshot`` re-hashes and rejects a mismatch), the
     ``retrieval_date`` (injected — never ``datetime.now()`` inside the pure function), and the span
     bounds. ``content_sha256`` + ``retrieval_date`` together are the "I saw exactly this text on this
     date" attestation a dead YouTube URL can no longer provide.

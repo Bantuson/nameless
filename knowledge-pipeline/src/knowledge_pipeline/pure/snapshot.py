@@ -5,8 +5,12 @@ YouTube videos and whole channels get taken down, and auto-captions get silently
 only record of a claim's source is a live URL, the evidence trail rots and the project's core promise —
 "every claim traceable to its source" — quietly breaks. So at ingest we compute a content hash + record
 the retrieval date: the citation then references OUR immutable snapshot, with the YouTube URL as a
-secondary, possibly-dead pointer. The hash also detects drift (someone re-captioned the video) and powers
-idempotent re-runs (same hash ⇒ already snapshotted ⇒ skip).
+secondary, possibly-dead pointer. The hash is also the integrity fingerprint: ``load_snapshot`` re-hashes
+the snapshot file on read and rejects it if the stored ``content_sha256`` no longer matches (tamper, or
+drift if the captured evidence was hand-edited). NOTE on automatic re-capture drift: pipeline idempotency
+is keyed on ``video_id`` (an already-ingested id is skipped *before* re-fetch), so a YouTube re-caption is
+not observed unless an explicit re-fetch/recheck re-runs the hash comparison — the stored hash is what
+makes that comparison possible, not an automatic guarantee on every run.
 
 Two purity disciplines, both load-bearing:
   * ``retrieval_date`` is INJECTED (``now``), never read from the wall clock inside the function — so a
