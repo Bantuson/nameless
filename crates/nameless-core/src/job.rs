@@ -19,6 +19,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::fragment::FragmentId;
+use crate::reference::ReferenceTrackId;
 
 /// A typed unit of work crossing the control-plane → worker-plane seam.
 ///
@@ -32,6 +33,10 @@ pub enum JobEnvelope {
     FeatureExtract { fragment_id: FragmentId },
     /// Separate a track/fragment into stems (Phase 8 sampling worker).
     Separate { fragment_id: FragmentId },
+    /// Extract NON-melodic reference context (CLAP style embedding + vibe + sonic targets) for an
+    /// uploaded reference track (Phase 7 worker). Enqueued by `reference upload`; handled by the
+    /// Python `RestrictedReferenceAnalyzer`, which never computes f0/chroma (the non-cloning path).
+    AnalyzeReference { reference_track_id: ReferenceTrackId },
 }
 
 /// Strongly-typed job identifier.
@@ -177,6 +182,19 @@ mod tests {
         };
         let json = serde_json::to_string(&env).unwrap();
         assert!(json.contains("\"job\":\"separate\""));
+        let back: JobEnvelope = serde_json::from_str(&json).unwrap();
+        assert_eq!(env, back);
+    }
+
+    #[test]
+    fn analyze_reference_envelope_json_round_trips() {
+        let env = JobEnvelope::AnalyzeReference {
+            reference_track_id: crate::reference::ReferenceTrackId::new(),
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        // Self-describing snake_case tag — the exact shape the Python worker discriminates on.
+        assert!(json.contains("\"job\":\"analyze_reference\""));
+        assert!(json.contains("reference_track_id"));
         let back: JobEnvelope = serde_json::from_str(&json).unwrap();
         assert_eq!(env, back);
     }

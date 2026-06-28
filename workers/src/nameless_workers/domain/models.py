@@ -43,9 +43,22 @@ class SeparateJob(BaseModel):
     fragment_id: UUID
 
 
+class AnalyzeReferenceJob(BaseModel):
+    """Extract NON-melodic reference context for an uploaded reference track (the Phase-7 job).
+
+    Mirrors Rust ``JobEnvelope::AnalyzeReference`` byte-for-byte:
+    ``{"job": "analyze_reference", "reference_track_id": "<uuid>"}``. Handled by the
+    ``RestrictedReferenceAnalyzer``, which never computes f0/chroma (the non-cloning path).
+    """
+
+    model_config = ConfigDict(frozen=True)
+    job: Literal["analyze_reference"] = "analyze_reference"
+    reference_track_id: UUID
+
+
 # The tagged union, discriminated on `job` — the exact shape Rust serializes.
 JobEnvelope = Annotated[
-    Union[FeatureExtractJob, SeparateJob],
+    Union[FeatureExtractJob, SeparateJob, AnalyzeReferenceJob],
     Field(discriminator="job"),
 ]
 

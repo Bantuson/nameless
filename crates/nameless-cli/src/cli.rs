@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use nameless_core::fragment::{Fragment, FragmentId, FragmentKind, Project, ProjectId};
 use nameless_core::job::{JobEnvelope, JobId};
+use nameless_core::reference::{ReferenceRole, ReferenceTrack, ReferenceTrackId};
 use nameless_adapters::{content_hash, probe};
 
 use crate::error::CliError;
@@ -48,6 +49,12 @@ pub enum Command {
     Fragments {
         #[command(subcommand)]
         action: FragmentsAction,
+    },
+    /// Reference-track context: upload a finished song for vibe + non-melodic sonic targets,
+    /// inspect its summary, and attach it to a project as conditioning (never to clone it).
+    Reference {
+        #[command(subcommand)]
+        action: ReferenceAction,
     },
 }
 
@@ -88,6 +95,60 @@ pub enum FragmentsAction {
         #[arg(value_parser = parse_fragment_id)]
         id: FragmentId,
     },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ReferenceAction {
+    /// Upload a finished reference track. Stores the audio immutably by content hash and enqueues a
+    /// non-melodic context-extraction job (CLAP style embedding + genre + tempo range + LUFS +
+    /// tonal balance + stereo width + vibe). The reference is NOT a fragment and never enters the
+    /// arrangement (REF-01/REF-03).
+    Upload(ReferenceUploadArgs),
+    /// Show a reference's compact vibe/target summary (never the embedding vector or any array).
+    Show {
+        #[arg(value_parser = parse_reference_id)]
+        id: ReferenceTrackId,
+    },
+    /// Attach a reference to a project as conditioning context (REF-04).
+    Attach {
+        #[arg(value_parser = parse_reference_id)]
+        id: ReferenceTrackId,
+        /// The project UUID to attach the reference to.
+        #[arg(long, value_parser = parse_project_id)]
+        project: ProjectId,
+        /// What the reference steers: `vibe` (atmosphere) or `sonic-target` (measurable numbers).
+        #[arg(long, value_enum, default_value_t = RoleArg::Vibe)]
+        role: RoleArg,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct ReferenceUploadArgs {
+    /// Path to the finished audio file to upload (wav/mp3/flac/m4a).
+    pub path: PathBuf,
+    /// Optional track title (for the credits sheet / UI; never used as a conditioning target).
+    #[arg(long)]
+    pub title: Option<String>,
+    /// Optional artist (credits / UI only).
+    #[arg(long)]
+    pub artist: Option<String>,
+}
+
+/// clap value-enum mirror of [`ReferenceRole`] for `--role` (accepts `vibe` / `sonic-target`).
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab-case")]
+pub enum RoleArg {
+    Vibe,
+    SonicTarget,
+}
+
+impl From<RoleArg> for ReferenceRole {
+    fn from(r: RoleArg) -> Self {
+        match r {
+            RoleArg::Vibe => ReferenceRole::Vibe,
+            RoleArg::SonicTarget => ReferenceRole::SonicTarget,
+        }
+    }
 }
 
 /// clap value-enum mirror of [`FragmentKind`] for `--kind`.
@@ -133,6 +194,12 @@ fn parse_fragment_id(s: &str) -> Result<FragmentId, String> {
         .map_err(|_| format!("invalid fragment UUID: {s:?}"))
 }
 
+fn parse_reference_id(s: &str) -> Result<ReferenceTrackId, String> {
+    Uuid::parse_str(s)
+        .map(ReferenceTrackId)
+        .map_err(|_| format!("invalid reference UUID: {s:?}"))
+}
+
 /// Top-level dispatch. Builds the [`Plane`] from flags then runs the subcommand.
 pub fn run(cli: Cli) -> Result<(), CliError> {
     let plane = build_plane(cli.local)?;
@@ -165,7 +232,73 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
                 Ok(())
             }
         },
+        Command::Reference { action } => match action {
+            ReferenceAction::Upload(args) => {
+                let (track, job) = do_reference_upload(&plane, &args)?;
+                output::print_reference_uploaded(&track, job, cli.json);
+                Ok(())
+            }
+            ReferenceAction::Show { id } => {
+                let track = plane
+                    .references
+                    .get_track(id)?
+                    .ok_or_else(|| CliError::NotFound(format!("reference {id}")))?;
+                // None when uploaded but not yet analyzed — the summary is what `show` reports.
+                let summary = plane.references.get_context_summary(id)?;
+                output::print_reference_show(&track, summary.as_ref(), cli.json);
+                Ok(())
+            }
+            ReferenceAction::Attach { id, project, role } => {
+                // Fail clearly if the reference does not exist (mirrors fragment NotFound).
+                if plane.references.get_track(id)?.is_none() {
+                    return Err(CliError::NotFound(format!("reference {id}")));
+                }
+                let role: ReferenceRole = role.into();
+                plane.references.attach(project, id, role)?;
+                output::print_reference_attached(id, project, role, cli.json);
+                Ok(())
+            }
+        },
     }
+}
+
+/// The reference-upload core, factored out so it can be unit-tested with injected in-memory
+/// adapters. Stores the raw bytes immutably by content hash (de-duplicating; shared with capture +
+/// the Phase-8 stem library), probes for duration/sample-rate, persists the `ReferenceTrack`, and
+/// enqueues exactly one `AnalyzeReference` job. The track is NOT a fragment and never enters the
+/// state machine (REF-01/REF-03). Returns the new track + the enqueued job id.
+pub fn do_reference_upload(
+    plane: &Plane,
+    args: &ReferenceUploadArgs,
+) -> Result<(ReferenceTrack, JobId), CliError> {
+    let bytes = fs::read(&args.path).map_err(|source| CliError::ReadFile {
+        path: args.path.display().to_string(),
+        source,
+    })?;
+
+    // Content-address + store immutably (same path/contract as capture).
+    let key = content_hash(&bytes);
+    plane.store.put(&key, &bytes)?;
+
+    let p = probe(&bytes);
+
+    let track = ReferenceTrack::new_upload(
+        key,
+        args.title.clone(),
+        args.artist.clone(),
+        p.duration_ms,
+        p.sample_rate,
+    );
+    plane.references.insert_track(&track)?;
+
+    // Enqueue the NON-melodic context-extraction job (the Python restricted analyzer handles it).
+    let job = plane
+        .queue
+        .enqueue(JobEnvelope::AnalyzeReference {
+            reference_track_id: track.id,
+        })?;
+
+    Ok((track, job))
 }
 
 /// The capture core, factored out so it can be unit-tested with injected in-memory adapters.
@@ -210,8 +343,10 @@ pub fn do_capture(plane: &Plane, args: &CaptureArgs) -> Result<(Fragment, JobId)
 mod tests {
     use super::*;
     use nameless_core::job::{JobQueue, JobStatus};
-    use nameless_core::ports::FragmentRepo;
-    use nameless_adapters::{InMemoryFragmentRepo, InMemoryJobQueue, InMemoryObjectStore};
+    use nameless_core::ports::{FragmentRepo, ReferenceStore};
+    use nameless_adapters::{
+        InMemoryFragmentRepo, InMemoryJobQueue, InMemoryObjectStore, InMemoryReferenceStore,
+    };
     use std::io::Write;
 
     fn valid_uuid() -> String {
@@ -281,6 +416,7 @@ mod tests {
             store: Box::new(InMemoryObjectStore::new()),
             repo: Box::new(InMemoryFragmentRepo::new()),
             queue: Box::new(InMemoryJobQueue::new(16)),
+            references: Box::new(InMemoryReferenceStore::new()),
         }
     }
 
@@ -343,6 +479,98 @@ mod tests {
         // Distinct fragment ids, identical content-hash uri (immutable + de-duplicating storage).
         assert_ne!(f1.id, f2.id);
         assert_eq!(f1.audio_uri, f2.audio_uri);
+        let _ = fs::remove_file(&path);
+    }
+
+    // ---- reference subcommand parsing ----
+
+    #[test]
+    fn reference_upload_parses_with_optional_labels() {
+        assert!(Cli::try_parse_from([
+            "nameless", "--local", "reference", "upload", "song.wav", "--title", "Trust", "--artist",
+            "Brent Faiyaz",
+        ])
+        .is_ok());
+        // title/artist are optional.
+        assert!(Cli::try_parse_from(["nameless", "reference", "upload", "song.wav"]).is_ok());
+    }
+
+    #[test]
+    fn reference_attach_parses_role_kebab_and_requires_project() {
+        let p = valid_uuid();
+        let r = valid_uuid();
+        assert!(Cli::try_parse_from([
+            "nameless", "reference", "attach", &r, "--project", &p, "--role", "sonic-target",
+        ])
+        .is_ok());
+        // role defaults to vibe; project is required.
+        assert!(Cli::try_parse_from(["nameless", "reference", "attach", &r, "--project", &p]).is_ok());
+        assert!(Cli::try_parse_from(["nameless", "reference", "attach", &r]).is_err());
+    }
+
+    #[test]
+    fn reference_show_requires_valid_uuid() {
+        assert!(Cli::try_parse_from(["nameless", "reference", "show", &valid_uuid()]).is_ok());
+        assert!(Cli::try_parse_from(["nameless", "reference", "show", "nope"]).is_err());
+    }
+
+    // ---- reference upload behavior (in-memory adapters) ----
+
+    #[test]
+    fn upload_inserts_track_stores_audio_and_enqueues_one_analyze_job() {
+        let plane = in_memory_plane();
+        let path = write_temp_bytes("ref", b"finished song bytes");
+        let args = ReferenceUploadArgs {
+            path: path.clone(),
+            title: Some("Trust".into()),
+            artist: Some("Brent Faiyaz".into()),
+        };
+
+        let (track, job) = do_reference_upload(&plane, &args).unwrap();
+
+        // Track persisted with the content-hash uri; audio stored.
+        let stored = plane.references.get_track(track.id).unwrap().unwrap();
+        assert_eq!(stored.audio_uri, content_hash(b"finished song bytes"));
+        assert_eq!(stored.title.as_deref(), Some("Trust"));
+        assert!(plane.store.exists(&stored.audio_uri).unwrap());
+
+        // Exactly one AnalyzeReference job, matching this reference.
+        let rec = plane.queue.consume().unwrap().expect("one job enqueued");
+        assert_eq!(rec.id, job);
+        match rec.envelope {
+            JobEnvelope::AnalyzeReference { reference_track_id } => {
+                assert_eq!(reference_track_id, track.id)
+            }
+            other => panic!("expected AnalyzeReference, got {other:?}"),
+        }
+        assert!(plane.queue.consume().unwrap().is_none());
+        assert!(matches!(rec.status, JobStatus::InProgress));
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn upload_then_attach_links_reference_to_project() {
+        let plane = in_memory_plane();
+        let path = write_temp_bytes("refattach", b"another finished song");
+        let args = ReferenceUploadArgs {
+            path: path.clone(),
+            title: None,
+            artist: None,
+        };
+        let (track, _) = do_reference_upload(&plane, &args).unwrap();
+
+        let project = ProjectId::new();
+        plane
+            .references
+            .attach(project, track.id, ReferenceRole::SonicTarget)
+            .unwrap();
+
+        let links = plane.references.list_project_references(project).unwrap();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].reference_track_id, track.id);
+        assert_eq!(links[0].role, ReferenceRole::SonicTarget);
+
         let _ = fs::remove_file(&path);
     }
 }

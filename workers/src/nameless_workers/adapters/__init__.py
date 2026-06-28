@@ -9,20 +9,30 @@ Two families, exactly as the testability law requires:
       - :class:`~nameless_workers.adapters.repo_mem.InMemoryFragmentRepo`
       - :class:`~nameless_workers.adapters.job_source_mem.InMemoryJobSource`
 
+      - ``feature_fake.FakeFeatureExtractor`` / ``embed_fake.FakeEmbedder`` (Phase 2)
+      - Phase 7 reference fakes: ``reference_analyzer_fake.FakeReferenceAnalyzer``,
+        ``vibe_describer_fake.FakeVibeDescriber``, ``genre_tagger.FakeGenreTagger``
+
   * REAL adapters (NOT imported here — importing them is cheap, but they import their heavy library
     lazily *inside methods* so the package still imports under the light base install):
       - ``feature_librosa.LibrosaFeatureExtractor``   (librosa + torchcrepe + pyloudnorm)
       - ``embed_clap.ClapEmbedder``                   (laion_clap)
       - ``audio_loader_store.FilesystemAudioLoader``  (content-addressed object store on disk)
       - ``repo_pg.PgFragmentRepo``                    (psycopg + pgvector)
+      - Phase 7: ``reference_analyzer_clap.RestrictedReferenceAnalyzer`` (librosa + pyloudnorm +
+        CLAP; NEVER chroma/f0), ``vibe_describer_claude.ClaudeVibeDescriber`` (anthropic),
+        ``genre_tagger.ClapZeroShotGenreTagger`` (reuses the CLAP Embedder).
     Import these from their modules directly where the real plane is built (see ``cli.py``).
 """
 
 from .audio_loader_fake import InMemoryAudioLoader
 from .embed_fake import FakeEmbedder
 from .feature_fake import FakeFeatureExtractor
+from .genre_tagger import ClapZeroShotGenreTagger, FakeGenreTagger
 from .job_source_mem import InMemoryJobSource
+from .reference_analyzer_fake import FakeReferenceAnalyzer
 from .repo_mem import InMemoryFragmentRepo
+from .vibe_describer_fake import FakeVibeDescriber
 
 __all__ = [
     "InMemoryAudioLoader",
@@ -30,4 +40,9 @@ __all__ = [
     "FakeFeatureExtractor",
     "InMemoryJobSource",
     "InMemoryFragmentRepo",
+    # Phase 7 reference fakes
+    "FakeReferenceAnalyzer",
+    "FakeVibeDescriber",
+    "FakeGenreTagger",
+    "ClapZeroShotGenreTagger",
 ]

@@ -12,9 +12,11 @@
 
 use std::path::PathBuf;
 
-use nameless_core::ports::{FragmentRepo, JobQueue, ObjectStore};
+use nameless_core::ports::{FragmentRepo, JobQueue, ObjectStore, ReferenceStore};
 
-use nameless_adapters::{FileFragmentRepo, FilesystemObjectStore, InMemoryJobQueue};
+use nameless_adapters::{
+    FileFragmentRepo, FileReferenceStore, FilesystemObjectStore, InMemoryJobQueue,
+};
 
 use crate::error::CliError;
 
@@ -23,6 +25,8 @@ pub struct Plane {
     pub store: Box<dyn ObjectStore>,
     pub repo: Box<dyn FragmentRepo>,
     pub queue: Box<dyn JobQueue>,
+    /// Reference-track persistence (Phase 7) — uploads, context summaries, project links.
+    pub references: Box<dyn ReferenceStore>,
 }
 
 /// Default bounded capacity for the `--local` in-memory queue.
@@ -51,17 +55,23 @@ fn local_plane() -> Plane {
     // tested, but durable cross-restart delivery is the sqlxmq path (server profile). Do not
     // mistake this for durable local delivery.
     let queue = InMemoryJobQueue::new(LOCAL_QUEUE_CAPACITY);
+    // File-backed reference store so `reference upload` then `reference show` survive across
+    // separate `--local` process invocations (same JSON-file durability as the fragment repo).
+    let references = FileReferenceStore::new(root.join("references.json"));
     Plane {
         store: Box::new(store),
         repo: Box::new(repo),
         queue: Box::new(queue),
+        references: Box::new(references),
     }
 }
 
 /// The server profile (Postgres + sqlxmq + S3/R2), behind the `postgres` feature.
 #[cfg(feature = "postgres")]
 fn server_plane() -> Result<Plane, CliError> {
-    use nameless_adapters::{PostgresFragmentRepo, S3ObjectStore, SqlxmqJobQueue};
+    use nameless_adapters::{
+        PostgresFragmentRepo, PostgresReferenceStore, S3ObjectStore, SqlxmqJobQueue,
+    };
 
     let database_url = std::env::var("DATABASE_URL")
         .map_err(|_| CliError::Config("DATABASE_URL is required for the server profile".into()))?;
@@ -72,11 +82,14 @@ fn server_plane() -> Result<Plane, CliError> {
         .map_err(|e| CliError::Config(format!("connect sqlxmq queue: {e}")))?;
     let store = S3ObjectStore::from_env()
         .map_err(|e| CliError::Config(format!("connect S3/R2 store: {e}")))?;
+    let references = PostgresReferenceStore::connect(&database_url)
+        .map_err(|e| CliError::Config(format!("connect Postgres reference store: {e}")))?;
 
     Ok(Plane {
         store: Box::new(store),
         repo: Box::new(repo),
         queue: Box::new(queue),
+        references: Box::new(references),
     })
 }
 

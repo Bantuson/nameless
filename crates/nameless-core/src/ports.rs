@@ -16,6 +16,9 @@
 
 use crate::error::{RepoError, StoreError};
 use crate::fragment::{Fragment, FragmentId, Project, ProjectId};
+use crate::reference::{
+    ProjectReference, ReferenceContextSummary, ReferenceRole, ReferenceTrack, ReferenceTrackId,
+};
 
 /// Immutable, content-addressed blob storage (raw audio, later rendered audio + stems).
 ///
@@ -53,4 +56,48 @@ pub trait FragmentRepo {
 
     /// Fetch a single fragment by id, or `Ok(None)` if it does not exist.
     fn get_fragment(&self, id: FragmentId) -> Result<Option<Fragment>, RepoError>;
+}
+
+/// Persistence for reference tracks + their attachments to projects (Phase 7).
+///
+/// Mirrors the [`FragmentRepo`] split of responsibilities: the Rust control plane owns the
+/// `reference_tracks` rows (on upload) and the `project_reference_context` link (on attach). The
+/// `reference_context` row — the embedding + non-melodic targets + vibe — is WRITTEN BY THE PYTHON
+/// ANALYZER (exactly as `fragment_features` is, not by Rust), and the control plane only READS it
+/// back as a compact [`ReferenceContextSummary`] for `reference show`. That summary deliberately
+/// carries no embedding vector and no melodic field (the compact-output + non-cloning contracts).
+///
+/// Implementors: `InMemoryReferenceStore` (tests), `FileReferenceStore` (the `--local` JSON store),
+/// `PostgresReferenceStore` (prod, behind the `postgres` feature).
+pub trait ReferenceStore {
+    /// Insert an uploaded reference track.
+    fn insert_track(&self, track: &ReferenceTrack) -> Result<(), RepoError>;
+
+    /// Fetch a single reference track by id, or `Ok(None)` if absent.
+    fn get_track(&self, id: ReferenceTrackId) -> Result<Option<ReferenceTrack>, RepoError>;
+
+    /// List all reference tracks (newest-first encouraged; callers needing order should sort).
+    fn list_tracks(&self) -> Result<Vec<ReferenceTrack>, RepoError>;
+
+    /// Read the COMPACT, array-free context summary for a reference (for `reference show`).
+    /// `Ok(None)` when the track exists but has not been analyzed yet (the Python worker is the
+    /// writer). The full embedding vector is never returned through this port.
+    fn get_context_summary(
+        &self,
+        id: ReferenceTrackId,
+    ) -> Result<Option<ReferenceContextSummary>, RepoError>;
+
+    /// Attach a reference to a project with a role (idempotent upsert on the composite key).
+    fn attach(
+        &self,
+        project: ProjectId,
+        reference: ReferenceTrackId,
+        role: ReferenceRole,
+    ) -> Result<(), RepoError>;
+
+    /// List the references attached to a project, with their roles.
+    fn list_project_references(
+        &self,
+        project: ProjectId,
+    ) -> Result<Vec<ProjectReference>, RepoError>;
 }

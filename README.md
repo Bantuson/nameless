@@ -108,10 +108,20 @@ cargo run -p nameless-cli -- --local fragments list
 #   → one compact line per fragment: <id>  captured  hook  "chorus hook, ..."
 cargo run -p nameless-cli -- --local fragments show <FRAGMENT_ID>
 cargo run -p nameless-cli -- --local --json fragments list   # machine output
+
+# Phase 7 — reference-track context (upload a finished song for vibe + non-melodic targets):
+cargo run -p nameless-cli -- --local reference upload ./fave.wav --title "Trust" --artist "Brent Faiyaz"
+#   → prints: uploaded reference <REFERENCE_ID> (enqueued <JOB_ID>)   (NOT a fragment; never cloned)
+cargo run -p nameless-cli -- --local reference attach <REFERENCE_ID> --project <PROJECT_ID> --role sonic-target
+cargo run -p nameless-cli -- --local reference show <REFERENCE_ID>
+#   → compact vibe/target summary (genre, tempo range, LUFS, tonal balance, width, vibe) —
+#     the CLAP style vector is withheld (only its dimension is shown)
 ```
 
-Local state lives under `.nameless-local/` (`objects/` content-addressed blobs + `db.json`); it is
-git-ignored.
+Local state lives under `.nameless-local/` (`objects/` content-addressed blobs + `db.json` +
+`references.json`); it is git-ignored. In `--local`, the reference *analysis* (vibe + targets) is
+produced by the Python worker / a local analyzer shim — the Rust side stores the upload + enqueues
+the `AnalyzeReference` job.
 
 ### The production (`postgres`) path — ENV-GATED (real Postgres + R2, a non-4GB machine)
 
@@ -158,10 +168,23 @@ APIs of axum-era sqlx 0.8 / clap 4 / symphonia 0.5).
 | CAP-06 | Compact-by-default CLI (IDs/summaries, never audio) | `output.rs`, the whole CLI surface |
 | CAP-07 | Durable job queue (enqueue), retry + backpressure | `JobQueue`, `InMemoryJobQueue`, `SqlxmqJobQueue` |
 
+## Requirement coverage (Phase 7 — Reference-Track Context)
+
+| Req | What | Where (Rust control plane) |
+|-----|------|----------------------------|
+| REF-01 | Upload + persist a reference by ID (content-hash audio) | `cli::do_reference_upload`, `ReferenceTrack::new_upload`, `ReferenceStore` (`InMemory`/`File`/`Postgres`), migration `0003` |
+| REF-02 | Non-melodic vibe + sonic targets + LLM vibe description | `ReferenceContext` (built by the Python `RestrictedReferenceAnalyzer`; Rust reads the compact summary) |
+| REF-03 | **Structural** non-cloning (typed asymmetry) | `reference::ReferenceContext` (no melodic column) + `conditioning::gather_melodic_conditioning` (accepts only `&[Fragment]`; `compile_fail` doctest) |
+| REF-04 | Attach a reference to a project as conditioning | `cli` `reference attach`, `ReferenceStore::attach`, `project_reference_context` link |
+
+The Python worker plane covers REF-02 (analysis) + REF-03 (the `NonMelodicFeatures` seal) — see
+`workers/README.md` and `workers/LEARNING.md` §11b.
+
 ## Deferred to later phases (explicitly out of Phase 1)
 
 Feature extraction / embeddings / the `Captured → Analyzed` driver and real job **consumers**
 (Phase 2); `analyze`/`graph` subcommands (Phase 2+); the axum HTTP API (Phase 9 UI);
-reference-track context, stems, sampling + the attribution gate (Phases 7–8 — the `sampled`
-provenance and its human-path placement are *typed in now*, with no behavior yet). See
-`.planning/phases/01-typed-capture-spine/SKELETON.md`.
+reference-track context (Phase 7 — **delivered**: see the coverage table above); stems, sampling +
+the attribution gate (Phase 8 — the `sampled` provenance and its human-path placement are *typed in
+now*, with no behavior yet); M1 consumption of the reference conditioning bundle in generation/eval.
+See `.planning/phases/01-typed-capture-spine/SKELETON.md`.

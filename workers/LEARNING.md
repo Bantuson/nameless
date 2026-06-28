@@ -378,6 +378,94 @@ never place an un-analyzed one). "The harness gates; the agent explores" — app
 
 ---
 
+## 11b. Reference-track context (Phase 7) — and why non-cloning must be STRUCTURAL
+
+Phase 7 adds a second kind of grounding alongside the producer's own fragments: **upload a finished
+song you love, and the system extracts its *vibe* + measurable *non-melodic* sonic targets as
+conditioning context** — *never to recreate or clone it*, only to translate your intent better. This
+section teaches the ideas and, most importantly, why the non-cloning guarantee is a *type*, not a
+promise.
+
+### The thesis: a finished song is better context than a description — but it is never reproduced
+
+"Make it warm and spacious like a late-night Sonder record" is a description; the record itself is far
+richer *and* far more dangerous. Richer, because the audio carries measurable truth a sentence can't:
+its loudness, its stereo image, where its energy sits, its overall vibe. Dangerous, because the same
+audio also carries the *song* — the melody, the chords, the arrangement — and a melody-conditioned
+generator (MusicGen-Stem, MuseControlLite) is *designed to follow whatever reaches its melodic
+input*. Feed a reference's melody in and you get a clone, while believing you did "style transfer".
+So the job is: extract the rich, safe part (vibe + non-melodic targets) and make the dangerous part
+(melody/structure) **impossible to extract or pass through**.
+
+### Two conditioning inputs, kept in separate types
+
+| | Melodic conditioning | Reference (non-melodic) conditioning |
+|---|---|---|
+| Source | the producer's OWN `human_recorded` fragments | an uploaded reference track |
+| Generator may follow… | the melody/chroma (that's the point) | atmosphere + numbers ONLY |
+| Carries melody? | yes (your hum) | **no — there is no field for it** |
+| Type | `MelodicConditioning` (from `&[Fragment]`) | `ReferenceConditioning` (from a `ReferenceContext`) |
+
+The crux: these are **different types**, and the gather function that feeds the generator's melodic
+input — `gather_melodic_conditioning(fragments: &[Fragment])` — accepts only `Fragment`s. A
+`ReferenceTrack` is a *separate type* with no conversion into `Fragment`, so a reference is
+**compile-time barred** from the melodic path. There is no runtime branch to forget (PITFALLS.md
+Pitfall 6: "one shared feature path + one forgotten branch = silent cloning"). The Rust crate even
+ships a `compile_fail` doctest that proves passing a `ReferenceTrack` there does not type-check.
+
+### "What you don't store, you can't clone from" — typing the absence
+
+The guarantee is doubled at extraction. The restricted analyzer NEVER computes f0 or chroma for a
+reference (contrast the Phase-2 `LibrosaFeatureExtractor`, which *does*, for your own fragments). And
+the output type makes the absence structural:
+
+- Rust `ReferenceContext` has **no** melody/chroma/f0/chord/structure/key column. Adding one would be
+  an explicit, reviewable schema + type change.
+- Python `NonMelodicFeatures` is sealed with `extra="forbid"` — you literally cannot *construct* it
+  with an `f0=` or `chroma=` key; pydantic raises. `assert_non_melodic()` is a belt-and-suspenders
+  runtime tripwire that the analyzer runs on its own output and the tests assert on.
+
+Non-cloning therefore falls out of the type system, exactly the rigour the PRD applies to the eval
+gate ("the harness gates; the agent explores") — here the *types* gate, and an LLM-driven caller
+cannot even express the cloning operation.
+
+### What the measured targets actually capture (and what they can't)
+
+Each non-melodic target is a *global* descriptor — true about the whole track, useless for
+reconstructing a tune:
+
+- **LUFS** (integrated loudness, ITU-R BS.1770-4): "how loud is this master?" — one number. A mastering
+  target. (Phase-2 §7 covers the K-weighting + gating in depth; we reuse `pyloudnorm`.)
+- **Tonal balance** (5-band energy ratios): "where does the energy sit — bass-heavy? bright?" We sum
+  an STFT magnitude into 5 *wide* bands and normalize to ratios that sum to 1. Folding the spectrum
+  into 5 numbers **destroys** pitch information (a melody lives in the fine structure these bands
+  average over) — which is precisely why it's a safe target. Scale-invariant, so loud and quiet mixes
+  with the same balance map to the same shape.
+- **Stereo width** (mid/side): `mid=(L+R)/2`, `side=(L−R)/2`; width = `side_energy/(mid+side)` ∈ [0,1].
+  Mono → 0, decorrelated/wide → →1. A *spatial* property; says nothing about which notes play.
+- **Tempo range**: a band around `beat_track`'s estimate — rhythm, not melody.
+- **CLAP style embedding**: a single joint audio-text vector over the whole track — a *vibe
+  fingerprint* for advisory conditioning + retrieval. Crucially it's computed with the CLAP **audio
+  tower** and we never derive chroma/f0 from it. It is also weak for *fine-grained* genre
+  (PITFALLS.md Pitfall 5), so the zero-shot genre tag built on it (rank the audio embedding against
+  text-embedded genre prompts) is used for **coarse** tags only, with a confidence margin that can
+  honestly return "no tag".
+- **Vibe description**: the one *interpreted* field — an LLM (Claude) narrates mood/space/era/texture/
+  energy from the measured numbers. It is kept at a *different trust level*: human-facing context,
+  never a machine conditioning target, and the model is handed only the non-melodic features so it
+  cannot narrate a tune it was never shown.
+
+### Why this is the right shape
+
+Measured-vs-interpreted are separated by field and trust level; the embedding (a large array) is
+addressed by ID and surfaces only as its *dimension* (the compact-output / token strategy holds
+across the language boundary); and the reference is a first-class entity that **never enters the
+fragment lifecycle** — so it can never be placed, mixed, or rendered into an arrangement. The producer
+gets quality-in/quality-out grounding from a track they love, with cloning made un-representable
+rather than merely discouraged.
+
+---
+
 ## 12. References
 
 - **CREPE:** Kim, Salamon, Li, Bello, "CREPE: A Convolutional Representation for Pitch Estimation",
@@ -393,3 +481,10 @@ never place an un-analyzed one). "The harness gates; the agent explores" — app
   Radford et al., CLIP (the contrastive idea), 2021.
 - **ANN / pgvector:** Malkov & Yashunin, "Efficient and robust approximate nearest neighbor search using
   HNSW graphs", 2018; pgvector documentation (IVFFlat vs HNSW, operators).
+- **CLAP zero-shot genre (weakness):** Wu et al. (LAION-CLAP) note language supervision helps tagging but
+  is "less useful for genre classification"; ReCLAP (arXiv 2409.09213) reports zero-shot CLAP subpar vs
+  supervised — hence coarse-tag-only here (`.planning/research/PITFALLS.md` Pitfall 5).
+- **Mid/side & loudness for reference targets:** ITU-R BS.1770-4 (loudness, reused from §7); mid/side
+  (M/S) stereo decomposition for width — standard mastering DSP (`numpy`/`soundfile`, no extra lib).
+- **Non-cloning as a typed boundary:** `.planning/research/ARCHITECTURE.md` Pattern 2 (reference as
+  conditioning, not a fragment) + `PITFALLS.md` Pitfall 6 (clone-boundary leak — type the asymmetry).

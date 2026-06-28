@@ -3,10 +3,34 @@
 The audio-ML half of Nameless (PRD §4–5). **Phase 2** delivers *fragment analysis*: take a captured
 fragment to `analyzed` by computing audio features + joint CLAP embeddings, persist them, advance the
 typed lifecycle, and make fragments retrievable by note text or audio similarity (pgvector).
+**Phase 7** adds the *reference-track context* layer: analyze an uploaded finished song into its
+**vibe + measurable non-melodic sonic targets** — with cloning made *structurally* impossible.
 
 - Requirements covered: **CAP-03** (f0, chroma, onsets/beat-grid/tempo, key, LUFS) and **CAP-04**
-  (CLAP audio + note-text embeddings indexed in pgvector for retrieval).
-- The DSP/ML is explained in depth in **[`LEARNING.md`](./LEARNING.md)**.
+  (CLAP audio + note-text embeddings indexed in pgvector for retrieval); **REF-02** (non-melodic
+  vibe + sonic targets + LLM vibe description) and **REF-03** (structural non-cloning).
+- The DSP/ML is explained in depth in **[`LEARNING.md`](./LEARNING.md)** — see §11b for the Phase-7
+  reference layer and *why non-cloning must be structural, not conventional*.
+
+## Phase 7: reference-track context (the non-cloning layer)
+
+The `RestrictedReferenceAnalyzer` extracts ONLY non-melodic descriptors from a reference's audio — it
+**never** calls `chroma_cqt` / `torchcrepe` (contrast the Phase-2 `LibrosaFeatureExtractor`, which
+does, for the producer's own fragments). Its output type (`NonMelodicFeatures`) is sealed with
+`extra="forbid"`, so a melody literally cannot be constructed into a reference's context. What the
+type cannot carry, generation cannot clone (REF-03).
+
+| Port (`reference_ports.py`) | Real adapter (lazy) | Fake adapter |
+|---|---|---|
+| `ReferenceAnalyzer` | `RestrictedReferenceAnalyzer` (librosa STFT + pyloudnorm + CLAP; no chroma/f0) | `FakeReferenceAnalyzer` |
+| `VibeDescriber` | `ClaudeVibeDescriber` (`anthropic`, `claude-opus-4-8`, adaptive thinking) | `FakeVibeDescriber` |
+| `GenreTagger` | `ClapZeroShotGenreTagger` (reuses the CLAP Embedder; coarse zero-shot) | `FakeGenreTagger` |
+
+Pure math (no librosa/torch): `pure/tonal_balance.py` (5-band RMS ratios), `pure/stereo_width.py`
+(mid/side), `pure/non_melodic.py` (the restricted-feature invariant + `assert_non_melodic`),
+`pure/reference_summary.py` (compact, array-free formatting). The Rust control plane owns
+`reference_tracks` + the project link and reads back a compact summary; this analyzer is the sole
+writer of `reference_context` (mirroring how Phase 2 splits fragments vs. `fragment_features`).
 
 ## Design: ports & adapters (why the tests need no ML or DB)
 
@@ -52,8 +76,11 @@ heavy paths are **env-gated** below. Nothing here was installed on the build box
 ```bash
 cd workers
 uv sync --extra dev          # installs only pydantic + numpy + pytest
-uv run pytest -q             # 58 tests: state mirror (480-triple), key-from-chroma, vectors,
-                             # orchestration, retrieval ranking, persistence contract, runner
+uv run pytest -q             # 102 tests: Phase 2 (state mirror 480-triple, key-from-chroma, vectors,
+                             # orchestration, retrieval ranking, persistence, runner) +
+                             # Phase 7 (44: tonal-balance + stereo-width math, the non-melodic
+                             # invariant, vibe summary, genre tagging, vibe describer, analyzer e2e,
+                             # AnalyzeReference job round-trip)
 ```
 
 (If not using uv: `pip install pydantic numpy pytest` then `PYTHONPATH=src pytest -q`.)
@@ -80,6 +107,14 @@ uv run nameless-workers fragments search --note "the chorus-like ideas" --limit 
 uv run nameless-workers fragments search --similar-to <FRAGMENT_UUID> --field audio
 uv run nameless-workers fragments search --note "spacious amapiano pad" --json
 ```
+
+**Phase 7 — reference analysis (env-gated; the LLM vibe call is NOT run here).** The real
+`RestrictedReferenceAnalyzer` needs `--extra ml` (librosa + pyloudnorm + CLAP) and the
+`ClaudeVibeDescriber` needs `ANTHROPIC_API_KEY` (`pip install anthropic`). Wiring (built, not run):
+the Rust `reference upload` enqueues an `AnalyzeReference` job; the analyzer composes
+`RestrictedReferenceAnalyzer(embedder=ClapEmbedder(), genre_tagger=ClapZeroShotGenreTagger(embedder),
+vibe_describer=ClaudeVibeDescriber())` and writes the `reference_context` row (after migration
+`0003_reference_tracks.sql`). It computes only non-melodic targets — never f0/chroma.
 
 ## Running the worker (the cross-language seam)
 

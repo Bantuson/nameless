@@ -6,8 +6,11 @@
 //! JSON object; the human form prints IDs + a one-line summary. This single chokepoint is what
 //! the information-disclosure test (T-01-03) asserts against.
 
-use nameless_core::fragment::{Fragment, Project};
+use nameless_core::fragment::{Fragment, Project, ProjectId};
 use nameless_core::job::JobId;
+use nameless_core::reference::{
+    ReferenceContextSummary, ReferenceRole, ReferenceTrack, ReferenceTrackId,
+};
 
 /// Truncate a note to a compact preview so list output stays one line per fragment.
 fn preview(note: &str, max: usize) -> String {
@@ -116,6 +119,122 @@ pub fn print_fragment_show(f: &Fragment, json: bool) {
             println!("parent       {parent}");
         }
         println!("note         {}", f.note_text);
+    }
+}
+
+// =================================================================================================
+// Reference-track output (Phase 7). Compact by construction: NEVER the CLAP embedding vector or any
+// feature array — only the vibe prose + the scalar sonic targets + the embedding's DIMENSION.
+// =================================================================================================
+
+/// `reference upload` result — the reference id plus the enqueued analysis job id.
+pub fn print_reference_uploaded(track: &ReferenceTrack, job: JobId, json: bool) {
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "reference": track.id.to_string(),
+                "audio_uri": track.audio_uri,
+                "enqueued_job": job.to_string(),
+            })
+        );
+    } else {
+        println!("uploaded reference {} (enqueued {})", track.id, job);
+    }
+}
+
+/// `reference show` — the compact vibe/target summary. `summary` is `None` when the reference has
+/// been uploaded but not analyzed yet. This function has NO path that can print the embedding vector
+/// (the summary type does not carry it) — the compact-output contract holds structurally.
+pub fn print_reference_show(
+    track: &ReferenceTrack,
+    summary: Option<&ReferenceContextSummary>,
+    json: bool,
+) {
+    if json {
+        let analysis = summary.map(|s| {
+            serde_json::json!({
+                "genre": s.genre,
+                "tempo_bpm_min": s.tempo_bpm_min,
+                "tempo_bpm_max": s.tempo_bpm_max,
+                "lufs": s.lufs,
+                "tonal_balance": s.tonal_balance.bands(),
+                "stereo_width": s.stereo_width,
+                "vibe": s.vibe_description,
+                "embedding_dim": s.embedding_dim,      // a count, NEVER the vector
+                "analyzer_version": s.analyzer_version,
+            })
+        });
+        println!(
+            "{}",
+            serde_json::json!({
+                "id": track.id.to_string(),
+                "audio_uri": track.audio_uri,
+                "title": track.title,
+                "artist": track.artist,
+                "duration_ms": track.duration_ms,
+                "sample_rate": track.sample_rate,
+                "analysis": analysis,   // null until analyzed
+            })
+        );
+        return;
+    }
+
+    println!("id           {}", track.id);
+    println!("audio_uri    {}", track.audio_uri);
+    println!(
+        "title        {}",
+        track.title.as_deref().unwrap_or("-")
+    );
+    println!(
+        "artist       {}",
+        track.artist.as_deref().unwrap_or("-")
+    );
+    match summary {
+        None => println!("analysis     (pending — not analyzed yet)"),
+        Some(s) => {
+            println!(
+                "genre        {}",
+                s.genre.as_deref().unwrap_or("-")
+            );
+            println!("tempo        {:.0}–{:.0} BPM", s.tempo_bpm_min, s.tempo_bpm_max);
+            println!("lufs         {:.1} LUFS", s.lufs);
+            let [low, low_mid, mid, high_mid, high] = s.tonal_balance.bands();
+            println!(
+                "tonal        low {:.2} | low-mid {:.2} | mid {:.2} | high-mid {:.2} | high {:.2}",
+                low, low_mid, mid, high_mid, high
+            );
+            println!("stereo_width {:.2}", s.stereo_width);
+            // The 512-d style vector itself is NEVER printed — only its dimension.
+            println!("style_embed  {}-d (vector withheld)", s.embedding_dim);
+            println!("vibe         {}", s.vibe_description);
+        }
+    }
+}
+
+/// `reference attach` result — confirm the project↔reference link + role.
+pub fn print_reference_attached(
+    reference: ReferenceTrackId,
+    project: ProjectId,
+    role: ReferenceRole,
+    json: bool,
+) {
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "reference": reference.to_string(),
+                "project": project.to_string(),
+                "role": role.as_str(),
+            })
+        );
+    } else {
+        println!(
+            "attached reference {} to project {} as {}",
+            reference,
+            project,
+            role.as_str()
+        );
     }
 }
 
