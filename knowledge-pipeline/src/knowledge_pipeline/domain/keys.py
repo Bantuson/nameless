@@ -26,7 +26,11 @@ import re
 _NON_KEY = re.compile(r"[^a-z0-9]+")
 _WS = re.compile(r"\s+")
 _WORD = re.compile(r"[a-z0-9][a-z0-9'\-]*")
-_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+# Sign-aware (WR-01): capture an optional leading minus so "-6 dB" (cut) and "6 dB" (boost) DON'T collapse
+# to the same magnitude. The ``(?<![A-Za-z0-9])`` lookbehind keeps a hyphen that is a *connector* rather
+# than a sign out of the capture — "TR-808" / "sub-808" yield ``808``, not ``-808`` — so only a real
+# leading minus (preceded by start/space/punctuation) is read as negative.
+_NUMBER = re.compile(r"(?<![A-Za-z0-9])-?\d+(?:\.\d+)?")
 
 
 def normalize_text(text: str) -> str:
@@ -46,10 +50,20 @@ def tokens(text: str) -> list[str]:
 
 
 def _norm_number(token: str) -> str:
-    """Canonicalize a numeric token so ``030`` == ``30`` and ``30.0`` == ``30``. Pure."""
+    """Canonicalize a numeric token so ``030`` == ``30``, ``30.0`` == ``30``, ``-030`` == ``-30``. Pure.
+
+    Sign-aware (WR-01): a leading minus is preserved (``-6`` stays ``-6``) so a sign flip cannot be grounded
+    by the opposite-signed source, but ``-0`` canonicalizes to ``0`` (there is no negative zero magnitude).
+    """
+    neg = token.startswith("-")
+    if neg:
+        token = token[1:]
     if "." in token:
         token = token.rstrip("0").rstrip(".")
-    return token.lstrip("0") or "0"
+    magnitude = token.lstrip("0") or "0"
+    if magnitude == "0":
+        return "0"
+    return f"-{magnitude}" if neg else magnitude
 
 
 def numbers(text: str) -> set[str]:
@@ -60,8 +74,10 @@ def numbers(text: str) -> set[str]:
     *asserts* and demands every one of them also appear in a CITED source quote; a confident-sounding
     value present nowhere in the evidence ("high-pass at 40 Hz" when no source said 40) is the single
     worst GIGO failure, and surfacing it as a set difference makes the reject mechanical, not a judgment
-    call. We compare the magnitude only (``30`` from "30 Hz") because the unit travels in the prose, not
-    the number — so "30 hz" in a quote grounds "30 Hz" in the skill, but a wrong magnitude never passes.
+    call. The unit travels in the prose, not the number — so "30 hz" in a quote grounds "30 Hz" in the
+    skill, but a wrong magnitude never passes. Sign IS load-bearing for a mixing/EQ skill (WR-01): a leading
+    minus is captured and preserved, so "+6 dB" (boost) is NOT grounded by "-6 dB" (cut) — a sign flip is a
+    maximally-confident wrong value the gate must catch, not a rounding nuance.
     """
     return {_norm_number(n) for n in _NUMBER.findall(text)}
 
