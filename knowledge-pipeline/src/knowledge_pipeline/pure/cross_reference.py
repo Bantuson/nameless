@@ -67,9 +67,12 @@ def cross_reference(claims: Sequence[Claim]) -> list[ClaimCluster]:
         contested = len(distinct_stances) >= 2 or len(distinct_number_sets) >= 2
 
         genres = sorted({g for c in members for g in c.genre})
-        # representative stage/technique (members share a normalized topic; take the first raw labels)
-        stage = members[0].stage
-        technique = members[0].technique
+        # representative stage/technique. Members share a *normalized* topic key, so normalize the
+        # representative labels too (IN-02) — otherwise the cluster would display whichever raw casing
+        # the arbitrary first member happened to use ("Mixing" vs "mixing"), an inconsistency with the
+        # topic key. normalize_key matches what topic_key already applied.
+        stage = normalize_key(members[0].stage)
+        technique = normalize_key(members[0].technique)
 
         if contested:
             consensus: list[Claim] = []

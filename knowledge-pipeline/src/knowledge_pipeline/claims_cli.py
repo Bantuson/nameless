@@ -7,12 +7,12 @@ Subcommands:
   * ``claims show``    — one claim traced to its source quote + timestamp + video. [KNOW-05 #2]
   * ``claims stats``   — compact roll-up (claims / clusters / contested / citation-verified).
 
-Two run modes:
-  * ``--fixtures [DIR]`` (default DIR = bundled claim fixtures) — OFFLINE: a deterministic
-    FakeClaimExtractor over the fixture transcripts + the REAL SqliteClaimStore (sqlite is stdlib). Runs
-    anywhere on the base install; great for a demo/CI and the no-synthesis walkthrough.
+Two run modes (live is the DEFAULT; pass ``--fixtures`` for the offline path):
   * live (no ``--fixtures``) — the REAL AnthropicClaimExtractor over the Phase-3 snapshot corpus.
     ENV-GATED: needs ``uv sync --extra extract`` + ``ANTHROPIC_API_KEY`` + real tokens (see README).
+  * ``--fixtures [DIR]`` (DIR defaults to the bundled claim fixtures) — OFFLINE: a deterministic
+    FakeClaimExtractor over the fixture transcripts + the REAL SqliteClaimStore (sqlite is stdlib). Runs
+    anywhere on the base install; great for a demo/CI and the no-synthesis walkthrough.
 
 Output stays compact: one terse line per claim/cluster; the verbatim quote is printed only by
 ``claims show`` (the trace-back), never dumped in a listing.
@@ -259,7 +259,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_corpus_root(p_mine)
     p_mine.add_argument(
         "--fixtures", nargs="?", const="", default=None, metavar="DIR",
-        help="OFFLINE mode over the bundled claim fixtures (default). Omit for live env-gated mining.",
+        help="run OFFLINE over the bundled claim fixtures (DIR optional). Omit this flag for the "
+             "default live, env-gated mining path.",
     )
     p_mine.add_argument("--video", nargs="*", default=None, help="(live) specific video ids to mine")
     p_mine.add_argument("--model", default="claude-opus-4-8", help="(live) Claude model id")
