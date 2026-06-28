@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 9
 current_phase_name: Thin Web UI
-status: executing
-stopped_at: Phase 8 verified (115 py tests; attribution invariant) — starting Phase 9 (Thin Web UI) — FINAL phase
+status: milestone_complete
+stopped_at: ALL 9 PHASES COMPLETE — M0 milestone delivered (course-project mode). 394 tests pass here (knowledge-pipeline 239 + workers 115 + web 40); Rust written+reviewed (env-gated compile).
 last_updated: "2026-06-27T21:17:05.662Z"
 last_activity: 2026-06-27
 last_activity_desc: Phase 1 implemented — 3-crate Rust control plane (ports/adapters + typed state machine + content-hash storage + job queue + CLI + postgres-feature leaf)

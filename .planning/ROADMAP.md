@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Sparse-Genre Grounding** - Author a confidence-labeled alt-piano skill from parent-technique decomposition + real released-track audio ✓ (239 tests; grounded skill emitted; course-mode)
 - [x] **Phase 7: Reference-Track Context** - Upload a finished song; get its vibe + non-melodic sonic targets, with cloning structurally impossible ✓ (102 py tests; Rust reviewed; course-mode)
 - [x] **Phase 8: Stem Library + Attributed Sampling** - Separate tracks into a retained stem library; promote a stem to an attributed sample with a credits sheet ✓ (115 py tests; Rust reviewed; course-mode)
-- [ ] **Phase 9: Thin Web UI** - Do the core M0 loop — capture, reference upload, stem sampling, project review — in the browser
+- [x] **Phase 9: Thin Web UI** - Do the core M0 loop — capture, reference upload, stem sampling, project review — in the browser ✓ (40 vitest + tsc + build, all ran here)
 
 ## Phase Details
 
@@ -182,4 +182,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Sparse-Genre Grounding | 1/1 | ✓ Complete (239 tests) | 2026-06-28 |
 | 7. Reference-Track Context | 1/1 | ✓ Complete (102 py tests) | 2026-06-28 |
 | 8. Stem Library + Attributed Sampling | 1/1 | ✓ Complete (115 py tests) | 2026-06-28 |
-| 9. Thin Web UI | 0/TBD | Not started | - |
+| 9. Thin Web UI | 1/1 | ✓ Complete (40 vitest) | 2026-06-28 |
