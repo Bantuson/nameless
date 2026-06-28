@@ -51,8 +51,8 @@ create table stems (
     audio_uri          text not null,             -- SHA-256 content-hash object key of the stem audio
     separator_model    text not null,             -- e.g. 'htdemucs_ft' / 'htdemucs_6s'
     separator_version  text not null,             -- e.g. '4.0.1' — bumped ⇒ a re-separation is detectable
-    duration_ms        int,
-    sample_rate        int,
+    duration_ms        bigint,                     -- bigint (not int): mirrors the Rust u32 domain
+    sample_rate        bigint,                     --   without narrowing (i32 wraps negative > ~24.8 days)
     created_at_ms      bigint not null,
     -- Re-separating the same track with the same (deterministic) model yields the same stem bytes,
     -- hence the same content-hash uri. This makes re-runs idempotent: the worker's insert hits this
@@ -79,8 +79,8 @@ create table sample_attribution (
     source_title       text not null,             -- never blank (validated before insert)
     source_artist      text not null,
     stem_type          text not null,
-    start_ms           int  not null,
-    end_ms             int  not null,
+    start_ms           bigint not null,            -- bigint (not int): the Rust u32 ms range stored
+    end_ms             bigint not null,            --   without i32 narrowing, matching --local exactly
     rights_status      rights_status not null,
     created_at_ms      bigint not null,
     -- The time range must be a positive span — the DB-level mirror of the completeness predicate.

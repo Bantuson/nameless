@@ -56,8 +56,10 @@ impl PostgresSampleStore {
 
 impl StemStore for PostgresSampleStore {
     fn insert_stem(&self, stem: &Stem) -> Result<(), RepoError> {
-        let duration = stem.duration_ms.map(|v| v as i32);
-        let sample_rate = stem.sample_rate.map(|v| v as i32);
+        // Bind as i64 → the `bigint` columns hold the full u32 domain without narrowing (an `as i32`
+        // would wrap negative for values > i32::MAX, diverging from the file/in-memory stores).
+        let duration = stem.duration_ms.map(|v| v as i64);
+        let sample_rate = stem.sample_rate.map(|v| v as i64);
         let stem_type = stem.stem_type.as_str();
         self.rt
             .block_on(async {
@@ -161,8 +163,9 @@ impl AttributionStore for PostgresSampleStore {
         let a = &attribution.attribution;
         let stem_type = a.stem_type.as_str();
         let rights = a.rights_status.as_str();
-        let start = a.start_ms as i32;
-        let end = a.end_ms as i32;
+        // i64 → `bigint` columns: the full u32 ms range round-trips without i32 wrap (matches --local).
+        let start = a.start_ms as i64;
+        let end = a.end_ms as i64;
         self.rt
             .block_on(async {
                 sqlx::query!(
@@ -305,8 +308,8 @@ fn hydrate_attribution(
     source_title: String,
     source_artist: String,
     stem_type: &str,
-    start_ms: i32,
-    end_ms: i32,
+    start_ms: i64,
+    end_ms: i64,
     rights_status: &str,
     created_at_ms: i64,
 ) -> Result<SampleAttribution, RepoError> {
