@@ -15,9 +15,12 @@ aspiration and becomes a check.
   R2 NONEXISTENT_SRC  — every cited ``claim_id`` must exist in ``claims`` (no citation pointing at a
                         claim Phase 4 never extracted), and the citation's ``quote`` must equal the real
                         claim's quote (no quote tampering in the draft).
-  R3 INVENTED_NUMBER  — every numeric token a section ASSERTS must appear in one of *that section's own*
+  R3 INVENTED_NUMBER  — every numeric value a section ASSERTS must appear in one of *that section's own*
                         cited source quotes. A confident value present in no cited quote ("40 Hz" when the
-                        sources say 30) is the worst GIGO failure; this is the rule that catches it.
+                        sources say 30) is the worst GIGO failure; this is the rule that catches it. Both
+                        digit-form AND spelled-out cardinals are checked (WR-02), so "three hundred hertz"
+                        cannot evade the rule; the residual word-number gaps are documented on
+                        :func:`~knowledge_pipeline.domain.keys.word_numbers`.
   R4 UNGROUNDED       — the asserted prose must be covered (token overlap >= ``min_coverage``) by its
                         cited claims' text — catches hallucinated craft that smuggles no number.
   R5 CITATION_ROT     — (reuses Phase-4 :func:`~knowledge_pipeline.pure.citation.verify_citation`) when the
@@ -37,7 +40,7 @@ from enum import Enum
 from typing import Mapping, Optional
 
 from ..domain.claims import Claim
-from ..domain.keys import normalize_text, numbers, tokens
+from ..domain.keys import normalize_text, numbers, tokens, word_numbers
 from ..domain.models import RawTranscript
 from ..domain.skills import SectionKind, SkillDraft, SkillSection
 from .citation import verify_citation
@@ -79,6 +82,11 @@ class GateResult:
     @property
     def codes(self) -> set[str]:
         return {r.code.value for r in self.rejections}
+
+
+def _all_numbers(text: str) -> set[str]:
+    """Every load-bearing numeric value a body asserts — digit-form AND spelled-out cardinals (WR-02). Pure."""
+    return numbers(text) | word_numbers(text)
 
 
 def _section_label(s: SkillSection) -> str:
@@ -158,10 +166,12 @@ def citation_gate(
             continue  # the evidence base is unsound; do not run number/coverage checks on bad citations
 
         # ---- R3: no asserted number may be absent from a cited source quote ----
-        asserted_numbers = numbers(section.body)
+        # Digit-form AND spelled-out cardinals (WR-02): "three hundred hertz" is just as much an invented
+        # value as "300 Hz", so both forms are extracted on each side and compared with the same set diff.
+        asserted_numbers = _all_numbers(section.body)
         evidence_numbers: set[str] = set()
         for c in cited_claims:
-            evidence_numbers |= numbers(c.quote)
+            evidence_numbers |= _all_numbers(c.quote)
         invented = asserted_numbers - evidence_numbers
         if invented:
             rejections.append(

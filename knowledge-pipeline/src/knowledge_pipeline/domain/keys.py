@@ -82,6 +82,64 @@ def numbers(text: str) -> set[str]:
     return {_norm_number(n) for n in _NUMBER.findall(text)}
 
 
+# ---- spelled-out numerals (WR-02) ---------------------------------------------------------------
+# A PRAGMATIC subset: producers say "three hundred hertz" / "one twenty" as readily as "300". R3 only saw
+# digit-form numbers, so a spelled-out invented value slipped past the invented-number rule on the live
+# model path. We convert the common english cardinals (0..999,999) to canonical digits so the SAME set
+# difference catches them. RESIDUAL (documented, not closed): ordinals ("third"), fractions ("a third"),
+# decimals-in-words ("point five"), "a hundred"/"a couple", and exotic scales (million+) are NOT handled —
+# they fall back to the R4 token-coverage floor. This subset closes the cases the corpus actually uses.
+_WORD_UNITS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+}
+_WORD_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+              "eighty": 80, "ninety": 90}
+_WORD_SCALES = {"hundred": 100, "thousand": 1000}
+_NUMBER_WORDS = set(_WORD_UNITS) | set(_WORD_TENS) | set(_WORD_SCALES) | {"and"}
+_ALPHA_RUN = re.compile(r"[a-z]+")
+
+
+def word_numbers(text: str) -> set[str]:
+    """Spelled-out cardinals in ``text`` as canonical digit strings (``"three hundred"`` -> ``{"300"}``). Pure.
+
+    The companion to :func:`numbers` for the invented-number gate (WR-02): a model writing an invented value
+    in words ("high-pass around three hundred hertz" when no source said it) must not evade R3. Walks runs of
+    number-words, combining units/tens with ``hundred``/``thousand``. ``and`` is permitted between parts
+    ("one hundred and twenty" -> ``120``) but never starts a number. See the module note for the residual.
+    """
+    found: set[str] = set()
+    toks = _ALPHA_RUN.findall(text.lower())
+    i, n = 0, len(toks)
+    while i < n:
+        if toks[i] not in _NUMBER_WORDS or toks[i] == "and":
+            i += 1
+            continue
+        total = 0        # accumulates across thousands
+        chunk = 0        # accumulates the sub-thousand part
+        consumed = False
+        while i < n and toks[i] in _NUMBER_WORDS:
+            w = toks[i]
+            if w == "and":
+                i += 1
+                continue
+            if w in _WORD_UNITS:
+                chunk += _WORD_UNITS[w]
+            elif w in _WORD_TENS:
+                chunk += _WORD_TENS[w]
+            elif w == "hundred":
+                chunk = (chunk or 1) * 100
+            elif w == "thousand":
+                total += (chunk or 1) * 1000
+                chunk = 0
+            consumed = True
+            i += 1
+        if consumed:
+            found.add(_norm_number(str(total + chunk)))
+    return found
+
+
 def normalize_key(value: str | None) -> str:
     """Canonical kebab key for a stage/technique/stance label (``"Log Drum"`` -> ``"log-drum"``). Pure."""
     if not value:

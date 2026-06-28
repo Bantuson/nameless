@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from knowledge_pipeline.domain.keys import numbers
+from knowledge_pipeline.domain.keys import numbers, word_numbers
 from knowledge_pipeline.domain.skills import (
     ProductionCell,
     SkillStatus,
@@ -31,6 +31,45 @@ def test_numbers_are_sign_aware():
     assert numbers("-0 dB") == {"0"}
     # a hyphen that is a CONNECTOR, not a sign, is not read as negative (drum-machine names, sub-bass labels)
     assert numbers("layer a TR-808 and the sub-808") == {"808"}
+
+
+def test_word_numbers_normalizes_spelled_cardinals():
+    # WR-02: the pragmatic subset producers actually speak.
+    assert word_numbers("high-pass around three hundred hertz") == {"300"}
+    assert word_numbers("sidechain at one hundred and twenty bpm") == {"120"}
+    assert word_numbers("keep it under one thousand hz") == {"1000"}
+    assert word_numbers("twenty") == {"20"}
+    assert word_numbers("no spelled numbers here") == set()
+    assert word_numbers("and then the drop") == set()  # 'and' alone never starts a number
+
+
+def test_spelled_out_invented_number_is_rejected():
+    # WR-02 end-to-end: an invented value written in WORDS must not evade R3.
+    from .conftest import make_claim, make_draft
+    from knowledge_pipeline.pure.citation_gate import RejectionCode, citation_gate
+
+    claim = make_claim(claim_text="High-pass the low end on the sub.", quote="high-pass the low end on the sub",
+                       technique="sub-bass-highpass", stage="bassline", video="dh", ts_ms=4000)
+    claims = {claim.id: claim}
+    # the source named NO number; the draft invents "three hundred hertz" in words.
+    draft = make_draft([claim], default_body="High-pass the low end on the sub around three hundred hertz.")
+    result = citation_gate(draft, claims)
+    assert result.ok is False
+    assert RejectionCode.INVENTED_NUMBER.value in result.codes
+    assert any("300" in r.detail for r in result.rejections)
+
+
+def test_spelled_out_number_present_in_the_quote_is_allowed():
+    # symmetric: a spelled value the cited quote DOES contain grounds a spelled value in the body.
+    from .conftest import make_claim, make_draft
+    from knowledge_pipeline.pure.citation_gate import citation_gate
+
+    claim = make_claim(claim_text="High-pass the sub around three hundred hertz.",
+                       quote="high-pass the sub around three hundred hertz",
+                       technique="sub-bass-highpass", stage="bassline", video="dh", ts_ms=4000)
+    claims = {claim.id: claim}
+    draft = make_draft([claim], default_body="High-pass the sub around three hundred hertz.")
+    assert citation_gate(draft, claims).ok is True
 
 
 def test_invented_number_sign_flip_is_rejected():
