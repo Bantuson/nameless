@@ -7,7 +7,7 @@
  * (separation of concerns: lifecycle here, the actual call in each hook).
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface AsyncData<T> {
   data: T | undefined;
@@ -24,10 +24,24 @@ export function useAsyncData<T>(loader: () => Promise<T>, deps: unknown[]): Asyn
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
+  // The deps from the previous run, so we can tell a real deps change (e.g. a project switch) apart
+  // from a manual refresh() (which bumps `tick` but leaves `deps` identical).
+  const prevDeps = useRef<unknown[] | null>(null);
+
   useEffect(() => {
+    const depsChanged =
+      prevDeps.current === null ||
+      prevDeps.current.length !== deps.length ||
+      deps.some((d, i) => !Object.is(d, prevDeps.current![i]));
+    prevDeps.current = deps;
+
     let cancelled = false;
     setLoading(true);
     setError(undefined);
+    // Drop the previous entity's data on a deps change so a fast project switch shows the spinner
+    // alone — never the prior project's graph/credits — as this hook's docstring promises. A bare
+    // refresh() keeps the current data in place while reloading (no flash).
+    if (depsChanged) setData(undefined);
     loader()
       .then((d) => {
         if (!cancelled) setData(d);
