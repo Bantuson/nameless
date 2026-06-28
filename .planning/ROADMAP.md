@@ -24,6 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Reference-Track Context** - Upload a finished song; get its vibe + non-melodic sonic targets, with cloning structurally impossible ✓ (102 py tests; Rust reviewed; course-mode)
 - [x] **Phase 8: Stem Library + Attributed Sampling** - Separate tracks into a retained stem library; promote a stem to an attributed sample with a credits sheet ✓ (115 py tests; Rust reviewed; course-mode)
 - [x] **Phase 9: Thin Web UI** - Do the core M0 loop — capture, reference upload, stem sampling, project review — in the browser ✓ (40 vitest + tsc + build, all ran here)
+- [ ] **Phase 10: Control-Plane HTTP API** - The axum server exposing the `NamelessApi` contract the web UI calls (deferred from Phase 1; the UI had only a Mock backend until now) — INSERTED 2026-06-28
 
 ## Phase Details
 
@@ -167,6 +168,22 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 **UI hint**: yes
 
+### Phase 10: Control-Plane HTTP API
+
+**Goal**: A running axum HTTP server exposes exactly the `NamelessApi` contract the Phase 9 web UI calls, as a thin veneer over the existing control-plane use-cases — so the React app can run against a real backend instead of only `MockNamelessApi`.
+**Mode**: mvp (INSERTED — closes the Phase 1 axum deferral the milestone audit flagged)
+**Depends on**: Phase 1 (ports + `Plane` + `do_*` use-cases), Phase 7, Phase 8, Phase 9 (the TypeScript contract)
+**Requirements**: API-01 (was the deferred half of the PRD control-plane surface)
+**Success Criteria** (what must be TRUE):
+
+  1. An axum router exposes every endpoint in `web/src/api/NamelessApi.ts` / `HttpNamelessApi.ts` — projects (list/create), capture (multipart), fragments (list/show), references (list/upload-multipart/show/attach), stems (separate/list), samples (add/show), project graph + credits — at the exact paths, methods, and snake_case request/response shapes the TS client sends and expects.
+  2. Handlers REUSE the existing `do_capture`/`do_reference_upload`/`do_stems_separate`/`do_sample_add` use-cases and `output.rs` view-models over the `Plane` ports — the integrity logic (state machine, `PartialAttribution::into_complete` gate, non-cloning) is NOT re-implemented or weakened.
+  3. The error contract matches the client's `parse()`: 404 → not-found, 422 `{error:"incomplete_attribution", missing:[...]}` for an incomplete sample (and nothing is created), else `{message}` with an appropriate status.
+  4. The server is testable with no network/DB: handlers run over in-memory adapters via `tower`/`axum` test harness; the heavy server profile (Postgres/S3/sqlxmq) stays behind the `postgres` feature, the lean build still compiles `--local`.
+  5. Course-mode: complete, real, idiomatic axum 0.8 code + tests that EXIST (env-gated — not compiled on the 4GB box); a `LEARNING.md` explaining the axum/tower request lifecycle, multipart handling, and the ports-over-HTTP seam.
+
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
@@ -183,3 +200,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Reference-Track Context | 1/1 | ✓ Complete (102 py tests) | 2026-06-28 |
 | 8. Stem Library + Attributed Sampling | 1/1 | ✓ Complete (115 py tests) | 2026-06-28 |
 | 9. Thin Web UI | 1/1 | ✓ Complete (40 vitest) | 2026-06-28 |
+| 10. Control-Plane HTTP API | 0/1 | ◔ In progress (inserted) | — |
