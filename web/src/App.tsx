@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useActiveProject } from './ActiveProjectContext';
 import { AppHeader } from './components/AppHeader';
+import { ErrorMessage } from './components/ui';
 import { useProjects } from './hooks/useProjects';
 import { CaptureScreen } from './screens/CaptureScreen';
 import { ProjectScreen } from './screens/ProjectScreen';
@@ -18,6 +19,7 @@ export function App(): JSX.Element {
   const { projects, createProject } = useProjects();
   const { activeProjectId, setActiveProjectId } = useActiveProject();
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<Error | null>(null);
 
   // Default the active project to the first one once projects load.
   useEffect(() => {
@@ -26,9 +28,14 @@ export function App(): JSX.Element {
 
   async function handleCreate(title: string): Promise<void> {
     setCreating(true);
+    setCreateError(null);
     try {
       const project = await createProject(title);
       setActiveProjectId(project.id);
+    } catch (err) {
+      // Surface a failed create instead of dropping the rejection — the header fires this without
+      // awaiting, so without a catch a real-backend failure would look like a silent no-op.
+      setCreateError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setCreating(false);
     }
@@ -47,6 +54,7 @@ export function App(): JSX.Element {
         creatingProject={creating}
       />
       <main className="app__main" id="main">
+        {createError ? <ErrorMessage error={createError} /> : null}
         <Routes>
           <Route path="/" element={<Navigate to="/capture" replace />} />
           <Route path="/capture" element={<CaptureScreen />} />

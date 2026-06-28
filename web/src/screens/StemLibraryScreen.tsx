@@ -28,6 +28,7 @@ export function StemLibraryScreen(): JSX.Element {
 
   const [selectedStemId, setSelectedStemId] = useState<string | null>(null);
   const [separating, setSeparating] = useState(false);
+  const [separateError, setSeparateError] = useState<Error | null>(null);
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<SampleAddResult | null>(null);
   const [addError, setAddError] = useState<Error | null>(null);
@@ -45,8 +46,13 @@ export function StemLibraryScreen(): JSX.Element {
 
   async function onSeparate(): Promise<void> {
     setSeparating(true);
+    setSeparateError(null);
     try {
       await separate();
+    } catch (err) {
+      // Surface backend failures (the real control plane can reject/​error here) instead of letting
+      // the rejection vanish — the list's `error` only covers the list load, not this action.
+      setSeparateError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setSeparating(false);
     }
@@ -124,6 +130,7 @@ export function StemLibraryScreen(): JSX.Element {
 
         {loading ? <Loading label="Loading stems…" /> : null}
         {error ? <ErrorMessage error={error} /> : null}
+        {separateError ? <ErrorMessage error={separateError} /> : null}
         {!loading && !error && trackId ? (
           <StemTable stems={stems} selectedStemId={selectedStemId} onSelect={setSelectedStemId} />
         ) : null}
