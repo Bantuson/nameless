@@ -11,7 +11,9 @@ export function TonalBalanceBars({ bands }: { bands: number[] }): JSX.Element {
   return (
     <dl className="tonal" aria-label="Tonal balance by frequency band">
       {bands.map((value, i) => {
-        const pct = Math.round((value / total) * 100);
+        // Clamp to [0,100]: a real analyzer can emit a negative or >total band value, which would
+        // otherwise render a negative/overflowing bar width and a misleading percentage label.
+        const pct = Math.max(0, Math.min(100, Math.round((value / total) * 100)));
         const name = TONAL_BAND_NAMES[i] ?? `Band ${i + 1}`;
         return (
           <div className="tonal__row" key={name}>
