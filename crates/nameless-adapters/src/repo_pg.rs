@@ -89,19 +89,21 @@ impl PostgresFragmentRepo {
         })?;
         let state = FragmentState::from_db_str(&state)
             .ok_or_else(|| RepoError::Serialization(format!("unknown fragment state: {state}")))?;
-        Ok(Fragment {
-            id: FragmentId(id),
-            project_id: ProjectId(project_id),
+        // `from_persisted` is the sanctioned reconstruction path — `Fragment.state`/`.provenance`
+        // are private, so an adapter cannot (and must not) build the struct literally.
+        Ok(Fragment::from_persisted(
+            FragmentId(id),
+            ProjectId(project_id),
             kind,
             provenance,
             audio_uri,
-            duration_ms: duration_ms.map(|v| v as u32),
-            sample_rate: sample_rate.map(|v| v as u32),
+            duration_ms.map(|v| v as u32),
+            sample_rate.map(|v| v as u32),
             note_text,
             state,
-            parent_fragment_id: parent_fragment_id.map(FragmentId),
+            parent_fragment_id.map(FragmentId),
             created_at_ms,
-        })
+        ))
     }
 }
 
@@ -124,8 +126,8 @@ impl FragmentRepo for PostgresFragmentRepo {
 
     fn insert_fragment(&self, f: &Fragment) -> Result<(), RepoError> {
         // Bind enum labels as text and cast text→enum in SQL (compile-time-checked, injection-safe).
-        let provenance = f.provenance.as_str();
-        let state = f.state.as_str();
+        let provenance = f.provenance().as_str();
+        let state = f.state().as_str();
         let kind = f.kind.as_str();
         let duration = f.duration_ms.map(|v| v as i32);
         let sample_rate = f.sample_rate.map(|v| v as i32);

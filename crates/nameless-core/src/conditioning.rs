@@ -80,7 +80,7 @@ impl MelodicConditioning {
 pub fn gather_melodic_conditioning(fragments: &[Fragment]) -> MelodicConditioning {
     let source_fragment_ids = fragments
         .iter()
-        .filter(|f| f.provenance == Provenance::HumanRecorded)
+        .filter(|f| f.provenance() == Provenance::HumanRecorded)
         .map(|f| f.id)
         .collect();
     MelodicConditioning {
@@ -143,11 +143,10 @@ mod tests {
         )
     }
 
-    /// A fragment with a non-human provenance, to prove the human-only filter.
+    /// A fragment with a non-human provenance, to prove the human-only filter. Uses the sanctioned
+    /// `cfg(test)` builder rather than a raw field write (the field is private).
     fn ai(project: ProjectId) -> Fragment {
-        let mut f = human(project, "generated");
-        f.provenance = Provenance::AiGenerated;
-        f
+        human(project, "generated").test_with_provenance(Provenance::AiGenerated)
     }
 
     #[test]

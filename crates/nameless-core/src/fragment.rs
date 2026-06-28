@@ -11,8 +11,11 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::attribution::CompleteAttribution;
 use crate::provenance::Provenance;
-use crate::state_machine::FragmentState;
+use crate::state_machine::{
+    place, transition, FragmentState, IllegalTransition, PlaceError, Transition,
+};
 
 /// Strongly-typed fragment identifier (newtype over UUID, serde-transparent).
 ///
@@ -144,15 +147,24 @@ pub struct Fragment {
     pub id: FragmentId,
     pub project_id: ProjectId,
     pub kind: FragmentKind,
-    pub provenance: Provenance,
+    /// Provenance — how this fragment entered the graph. **PRIVATE by design:** it is set once at
+    /// construction (`new_capture`/`new_sampled`/`from_persisted`) and never reassigned, so the
+    /// eval gate (AI) and attribution gate (sampled) that key on it cannot be defeated by a stray
+    /// `frag.provenance = …` (which will not compile outside this module). Read via
+    /// [`Fragment::provenance`].
+    provenance: Provenance,
     /// Immutable object-store key (SHA-256 content hash) — NEVER the audio bytes themselves.
     pub audio_uri: String,
     pub duration_ms: Option<u32>,
     pub sample_rate: Option<u32>,
     /// The intent channel — free text, also the compact node summary the agent reads.
     pub note_text: String,
-    /// Lifecycle state. Mutated ONLY via [`Fragment::apply`] (see `state_machine`).
-    pub state: FragmentState,
+    /// Lifecycle state. **PRIVATE by design** and mutated ONLY via [`Fragment::apply`] /
+    /// [`Fragment::place`] (which drive the validated [`crate::state_machine::transition`]). A direct
+    /// `frag.state = …` will not compile outside this module — that is what makes "an unanalyzed /
+    /// ungated fragment can never be placed" a *structural* guarantee rather than a convention. Read
+    /// via [`Fragment::state`].
+    state: FragmentState,
     /// Lineage edge (e.g. an AI fragment's parent human fragment). `None` for a raw capture.
     pub parent_fragment_id: Option<FragmentId>,
     pub created_at_ms: i64,
@@ -213,6 +225,104 @@ impl Fragment {
             parent_fragment_id: None,
             created_at_ms: now_ms(),
         }
+    }
+
+    /// Read-only access to provenance. The field is private; provenance is fixed at construction.
+    pub fn provenance(&self) -> Provenance {
+        self.provenance
+    }
+
+    /// Read-only access to the lifecycle state. The field is private; the ONLY way to *change* it is
+    /// [`Fragment::apply`] / [`Fragment::place`], so callers can observe but never forge state.
+    pub fn state(&self) -> FragmentState {
+        self.state
+    }
+
+    /// Reassemble a fragment from an already-persisted row (repository-adapter reconstruction path).
+    ///
+    /// This is the single sanctioned way to set `state`/`provenance` to *arbitrary* values, and it
+    /// exists solely so an adapter can rebuild a fragment whose state was produced — and validated —
+    /// by a prior live transition before being written to storage. It performs no transition check
+    /// by design (the stored state is already legal). Because it is the only such constructor, every
+    /// *live* mutation still funnels through `apply`/`place`; a stray field write elsewhere will not
+    /// compile.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_persisted(
+        id: FragmentId,
+        project_id: ProjectId,
+        kind: FragmentKind,
+        provenance: Provenance,
+        audio_uri: String,
+        duration_ms: Option<u32>,
+        sample_rate: Option<u32>,
+        note_text: String,
+        state: FragmentState,
+        parent_fragment_id: Option<FragmentId>,
+        created_at_ms: i64,
+    ) -> Self {
+        Fragment {
+            id,
+            project_id,
+            kind,
+            provenance,
+            audio_uri,
+            duration_ms,
+            sample_rate,
+            note_text,
+            state,
+            parent_fragment_id,
+            created_at_ms,
+        }
+    }
+}
+
+impl Fragment {
+    /// The ONLY way to mutate a fragment's lifecycle state for the non-placement verbs (and for
+    /// non-sampled placement). Delegates to [`crate::state_machine::transition`] and assigns the
+    /// result on success. Lives in this module (with the private `state` field) so that it — and
+    /// [`Fragment::place`] — are the sole code that can write `state`; there is no setter to abuse.
+    ///
+    /// **Sampled placement is deliberately refused here.** A `sampled` fragment's `Place` edge
+    /// carries an extra precondition — complete attribution — that `apply` cannot supply, so `apply`
+    /// returns [`IllegalTransition`] for `(Sampled, Place)` and the ONLY way to place a sample is
+    /// [`Fragment::place`] with a [`CompleteAttribution`]. This closes the would-be bypass: there is
+    /// no ungated path that writes `Placed` onto a sample. (For human / ai / derived material `apply`
+    /// keeps driving `Place` exactly as before — they have no attribution precondition.)
+    pub fn apply(&mut self, t: Transition) -> Result<(), IllegalTransition> {
+        if self.provenance == Provenance::Sampled && t == Transition::Place {
+            return Err(IllegalTransition {
+                from: self.state,
+                transition: t,
+            });
+        }
+        let next = transition(self.provenance, self.state, t)?;
+        self.state = next;
+        Ok(())
+    }
+
+    /// Place a fragment, enforcing the sampled-attribution gate (SAMP-03).
+    ///
+    /// This is the attribution-aware placement chokepoint. For a `sampled` fragment it REQUIRES a
+    /// `Some(&CompleteAttribution)`; for any other provenance the argument is ignored (pass `None`).
+    /// A driver that places a sample loads its [`crate::attribution::SampleAttribution`] row and
+    /// passes `Some(&row.attribution)` — and since that row can only exist as a complete value, the
+    /// gate is satisfiable exactly when (and only when) the sample is fully credited.
+    pub fn place(&mut self, attribution: Option<&CompleteAttribution>) -> Result<(), PlaceError> {
+        let next = place(self.provenance, self.state, attribution)?;
+        self.state = next;
+        Ok(())
+    }
+}
+
+/// Test-only sanctioned builder. Compiled ONLY under `cfg(test)`, so production code in any phase
+/// or crate physically cannot use it to forge provenance — it exists purely to set up fixtures
+/// (e.g. an `AiGenerated` fragment) that the public constructors do not directly reach.
+#[cfg(test)]
+impl Fragment {
+    /// Test-only: override provenance for a fixture. `cfg(test)` only.
+    pub(crate) fn test_with_provenance(mut self, p: Provenance) -> Self {
+        self.provenance = p;
+        self
     }
 }
 

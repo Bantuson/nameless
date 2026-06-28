@@ -687,7 +687,7 @@ mod tests {
         // Fragment persisted in Captured state with the content-hash uri.
         let stored = plane.repo.get_fragment(frag.id).unwrap().unwrap();
         assert_eq!(stored.note_text, "chorus hook");
-        assert_eq!(stored.state.as_str(), "captured");
+        assert_eq!(stored.state().as_str(), "captured");
         assert_eq!(stored.audio_uri, content_hash(b"some audio-ish bytes"));
         assert!(plane.store.exists(&stored.audio_uri).unwrap());
 
@@ -896,8 +896,8 @@ mod tests {
         let (frag, attr, job) = do_sample_add(&plane, &args).unwrap();
 
         // The fragment is sampled + captured, audio = the stem.
-        assert_eq!(frag.provenance.as_str(), "sampled");
-        assert_eq!(frag.state.as_str(), "captured");
+        assert_eq!(frag.provenance().as_str(), "sampled");
+        assert_eq!(frag.state().as_str(), "captured");
         assert_eq!(frag.audio_uri, stem.audio_uri);
         let stored = plane.repo.get_fragment(frag.id).unwrap().unwrap();
         assert_eq!(stored.id, frag.id);

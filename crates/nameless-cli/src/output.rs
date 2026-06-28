@@ -41,7 +41,7 @@ pub fn print_capture(frag: &Fragment, job: JobId, json: bool) {
             "{}",
             serde_json::json!({
                 "fragment": frag.id.to_string(),
-                "state": frag.state.as_str(),
+                "state": frag.state().as_str(),
                 "audio_uri": frag.audio_uri,
                 "enqueued_job": job.to_string(),
             })
@@ -59,7 +59,7 @@ pub fn print_fragment_list(frags: &[Fragment], json: bool) {
             .map(|f| {
                 serde_json::json!({
                     "id": f.id.to_string(),
-                    "state": f.state.as_str(),
+                    "state": f.state().as_str(),
                     "kind": f.kind.as_str(),
                     "note": f.note_text,
                 })
@@ -71,7 +71,7 @@ pub fn print_fragment_list(frags: &[Fragment], json: bool) {
             println!(
                 "{}  {:<9}  {:<6}  \"{}\"",
                 f.id,
-                f.state.as_str(),
+                f.state().as_str(),
                 f.kind.as_str(),
                 preview(&f.note_text, 60)
             );
@@ -89,8 +89,8 @@ pub fn print_fragment_show(f: &Fragment, json: bool) {
                 "id": f.id.to_string(),
                 "project_id": f.project_id.to_string(),
                 "kind": f.kind.as_str(),
-                "provenance": f.provenance.as_str(),
-                "state": f.state.as_str(),
+                "provenance": f.provenance().as_str(),
+                "state": f.state().as_str(),
                 "duration_ms": f.duration_ms,
                 "sample_rate": f.sample_rate,
                 "audio_uri": f.audio_uri,
@@ -102,8 +102,8 @@ pub fn print_fragment_show(f: &Fragment, json: bool) {
         println!("id           {}", f.id);
         println!("project      {}", f.project_id);
         println!("kind         {}", f.kind.as_str());
-        println!("provenance   {}", f.provenance.as_str());
-        println!("state        {}", f.state.as_str());
+        println!("provenance   {}", f.provenance().as_str());
+        println!("state        {}", f.state().as_str());
         println!(
             "duration_ms  {}",
             f.duration_ms
@@ -305,8 +305,8 @@ pub fn print_sample_added(
             "{}",
             serde_json::json!({
                 "fragment": frag.id.to_string(),
-                "provenance": frag.provenance.as_str(),
-                "state": frag.state.as_str(),
+                "provenance": frag.provenance().as_str(),
+                "state": frag.state().as_str(),
                 "source_title": a.source_title,
                 "source_artist": a.source_artist,
                 "stem_type": a.stem_type.as_str(),

@@ -5,7 +5,7 @@
 //!
 //! That guarantee lives HERE, and only here. There is exactly one function that may compute a
 //! next state — [`transition`] — and exactly one method that may mutate a fragment's state —
-//! [`Fragment::apply`], which delegates to `transition`. Illegal moves are a typed
+//! [`crate::fragment::Fragment::apply`], which delegates to `transition`. Illegal moves are a typed
 //! [`IllegalTransition`] error, not a panic and not a silent no-op. "The harness gates; the
 //! agent explores": any caller (including an LLM-driven one) can *attempt* any transition, but
 //! the type system + this match decide what is allowed.
@@ -28,7 +28,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::attribution::CompleteAttribution;
-use crate::fragment::Fragment;
 use crate::provenance::Provenance;
 
 /// Every state a fragment can occupy across both lifecycle paths (PRD §7).
@@ -248,44 +247,11 @@ pub fn place(
     Ok(next)
 }
 
-impl Fragment {
-    /// The ONLY way to mutate a fragment's lifecycle state for the non-placement verbs (and for
-    /// non-sampled placement). Delegates to [`transition`] and assigns the result on success.
-    ///
-    /// **Sampled placement is deliberately refused here.** A `sampled` fragment's `Place` edge
-    /// carries an extra precondition — complete attribution — that `apply` cannot supply, so `apply`
-    /// returns [`IllegalTransition`] for `(Sampled, Place)` and the ONLY way to place a sample is
-    /// [`Fragment::place`] with a [`CompleteAttribution`]. This closes the would-be bypass: there is
-    /// no ungated path that writes `Placed` onto a sample. (For human / ai / derived material `apply`
-    /// keeps driving `Place` exactly as before — they have no attribution precondition.)
-    pub fn apply(&mut self, t: Transition) -> Result<(), IllegalTransition> {
-        if self.provenance == Provenance::Sampled && t == Transition::Place {
-            return Err(IllegalTransition {
-                from: self.state,
-                transition: t,
-            });
-        }
-        let next = transition(self.provenance, self.state, t)?;
-        self.state = next;
-        Ok(())
-    }
-
-    /// Place a fragment, enforcing the sampled-attribution gate (SAMP-03).
-    ///
-    /// This is the attribution-aware placement chokepoint. For a `sampled` fragment it REQUIRES a
-    /// `Some(&CompleteAttribution)`; for any other provenance the argument is ignored (pass `None`).
-    /// A driver that places a sample loads its [`crate::attribution::SampleAttribution`] row and
-    /// passes `Some(&row.attribution)` — and since that row can only exist as a complete value, the
-    /// gate is satisfiable exactly when (and only when) the sample is fully credited.
-    pub fn place(
-        &mut self,
-        attribution: Option<&CompleteAttribution>,
-    ) -> Result<(), PlaceError> {
-        let next = place(self.provenance, self.state, attribution)?;
-        self.state = next;
-        Ok(())
-    }
-}
+// NOTE: `Fragment::apply` and `Fragment::place` — the only two methods that mutate `state` — now
+// live in `crate::fragment`, alongside the private `state`/`provenance` fields they write. Keeping
+// them in the same module as those private fields is what makes the no-bypass guarantee structural:
+// no code outside `fragment` (this module included) can assign `state`, so the validated edges in
+// `transition`/`place` below are the only routes a fragment can change lifecycle state.
 
 #[cfg(test)]
 mod tests {
@@ -473,33 +439,32 @@ mod tests {
     /// so the only door is `place(Some(&complete))`.
     #[test]
     fn test_no_bypass_for_sampled_placement() {
-        use crate::fragment::{Fragment, FragmentKind, ProjectId};
-        let mut f = Fragment::new_capture(
+        use crate::fragment::{Fragment, ProjectId};
+        // `new_sampled` is the sanctioned constructor for a `Sampled` fragment — no raw field write.
+        let mut f = Fragment::new_sampled(
             ProjectId::new(),
-            FragmentKind::Stem,
             "stemhash".into(),
             None,
             None,
             "sampled vocal chop".into(),
         );
-        f.provenance = Provenance::Sampled;
         // Walk the human path to Analyzed using apply (analysis verbs are unaffected).
         f.apply(Analyze).unwrap();
         f.apply(MarkAnalyzed).unwrap();
-        assert_eq!(f.state, Analyzed);
+        assert_eq!(f.state(), Analyzed);
 
         // BYPASS ATTEMPT 1: apply(Place) on a sample — refused, state unchanged.
         assert!(f.apply(Place).is_err());
-        assert_eq!(f.state, Analyzed);
+        assert_eq!(f.state(), Analyzed);
 
         // BYPASS ATTEMPT 2: place() without attribution — refused, state unchanged.
         assert_eq!(f.place(None), Err(PlaceError::AttributionRequired));
-        assert_eq!(f.state, Analyzed);
+        assert_eq!(f.state(), Analyzed);
 
         // THE ONLY DOOR: place() with complete attribution — succeeds.
         let attr = complete_attr();
         f.place(Some(&attr)).unwrap();
-        assert_eq!(f.state, Placed);
+        assert_eq!(f.state(), Placed);
     }
 
     /// A non-sampled fragment can still place via BOTH apply and the gate (no regression).
@@ -518,7 +483,7 @@ mod tests {
         f.apply(MarkAnalyzed).unwrap();
         // apply(Place) still works for human material.
         f.apply(Place).unwrap();
-        assert_eq!(f.state, Placed);
+        assert_eq!(f.state(), Placed);
     }
 
     /// `Fragment::apply` is the single mutation chokepoint and refuses illegal moves.
@@ -533,16 +498,16 @@ mod tests {
             None,
             "chorus hook".into(),
         );
-        assert_eq!(f.state, Captured);
+        assert_eq!(f.state(), Captured);
         // Illegal: cannot place straight from captured — state is unchanged.
         assert!(f.apply(Place).is_err());
-        assert_eq!(f.state, Captured);
+        assert_eq!(f.state(), Captured);
         // Legal walk down the human path.
         f.apply(Analyze).unwrap();
-        assert_eq!(f.state, Analyzing);
+        assert_eq!(f.state(), Analyzing);
         f.apply(MarkAnalyzed).unwrap();
-        assert_eq!(f.state, Analyzed);
+        assert_eq!(f.state(), Analyzed);
         f.apply(Place).unwrap();
-        assert_eq!(f.state, Placed);
+        assert_eq!(f.state(), Placed);
     }
 }
