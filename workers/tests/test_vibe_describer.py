@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
+from nameless_workers.adapters.vibe_describer_claude import (
+    ClaudeVibeDescriber,
+    VibeDescriptionError,
+)
 from nameless_workers.adapters.vibe_describer_fake import FakeVibeDescriber
 from nameless_workers.domain.reference import NonMelodicFeatures, TonalBalance
 
@@ -48,3 +54,70 @@ def test_tonal_tilt_drives_the_balance_phrase():
     bright = d.describe(_features(tempo=110, lufs=-9, width=0.5, low=0.05, high=0.6))
     assert "bass-forward" in warm
     assert "airy" in bright
+
+
+# --- ClaudeVibeDescriber refusal / empty-response handling (WR-03) -------------------------------
+# These exercise the REAL describer's response handling without any network or the anthropic SDK, by
+# injecting a fake client into the lazily-built _client slot.
+
+
+class _Block:
+    def __init__(self, type: str, text: str = "") -> None:
+        self.type = type
+        self.text = text
+
+
+class _Response:
+    def __init__(self, *, stop_reason: str, content: list[_Block]) -> None:
+        self.stop_reason = stop_reason
+        self.content = content
+
+
+class _FakeMessages:
+    def __init__(self, response: _Response) -> None:
+        self._response = response
+
+    def create(self, **_kwargs) -> _Response:
+        return self._response
+
+
+class _FakeClient:
+    def __init__(self, response: _Response) -> None:
+        self.messages = _FakeMessages(response)
+
+
+def _claude_with(response: _Response) -> ClaudeVibeDescriber:
+    d = ClaudeVibeDescriber()
+    d._client = _FakeClient(response)  # inject — skips _ensure_client / anthropic import
+    return d
+
+
+def test_claude_raises_on_safety_refusal():
+    d = _claude_with(_Response(stop_reason="refusal", content=[]))
+    with pytest.raises(VibeDescriptionError):
+        d.describe(_features(tempo=112, lufs=-9, width=0.5, low=0.4, high=0.1))
+
+
+def test_claude_raises_on_empty_text_content():
+    # No refusal flag, but only thinking blocks / no usable text — must still fail loudly, not "".
+    d = _claude_with(_Response(stop_reason="end_turn", content=[_Block("thinking")]))
+    with pytest.raises(VibeDescriptionError):
+        d.describe(_features(tempo=112, lufs=-9, width=0.5, low=0.4, high=0.1))
+
+
+def test_claude_raises_on_whitespace_only_text():
+    d = _claude_with(_Response(stop_reason="end_turn", content=[_Block("text", "   \n  ")]))
+    with pytest.raises(VibeDescriptionError):
+        d.describe(_features(tempo=112, lufs=-9, width=0.5, low=0.4, high=0.1))
+
+
+def test_claude_returns_clean_text_on_success():
+    d = _claude_with(
+        _Response(
+            stop_reason="end_turn",
+            content=[_Block("thinking"), _Block("text", "  late-night, wide and warm.  ")],
+        )
+    )
+    assert d.describe(_features(tempo=112, lufs=-9, width=0.5, low=0.4, high=0.1)) == (
+        "late-night, wide and warm."
+    )

@@ -23,6 +23,14 @@ from ..domain.reference import NonMelodicFeatures
 DEFAULT_MODEL = "claude-opus-4-8"
 MODEL_VERSION = "claude-opus-4-8:vibe-1"
 
+
+class VibeDescriptionError(RuntimeError):
+    """Raised when the model produces no usable vibe text (safety refusal or empty content).
+
+    A loud failure is deliberate: the job queue should retry / dead-letter rather than persist an
+    empty ``vibe_description``, which would be a silent quality degradation (PITFALLS.md Pitfall 5).
+    """
+
 _SYSTEM = (
     "You are a music A&R assistant. Given ONLY measured, non-melodic descriptors of a finished "
     "track (tempo range, loudness, stereo width, coarse spectral balance, and a coarse genre tag), "
@@ -81,6 +89,22 @@ class ClaudeVibeDescriber:
                 }
             ],
         )
+        # A safety refusal yields stop_reason == "refusal" with empty/altered content; treat it as a
+        # hard failure so the job retries / dead-letters instead of persisting "".
+        if getattr(response, "stop_reason", None) == "refusal":
+            raise VibeDescriptionError(
+                "Claude refused the vibe-description request (stop_reason='refusal'); "
+                "refusing to persist an empty description."
+            )
         # Concatenate the text blocks (skip any thinking blocks); strip to a single clean line.
         parts = [block.text for block in response.content if block.type == "text"]
-        return " ".join(p.strip() for p in parts if p.strip()).strip()
+        text = " ".join(p.strip() for p in parts if p.strip()).strip()
+        # Empty content (refusal without the flag, thinking-only output, truncation) must also fail
+        # loudly — never return "" to be silently persisted as the vibe.
+        if not text:
+            raise VibeDescriptionError(
+                "Claude returned no usable vibe text "
+                f"(stop_reason={getattr(response, 'stop_reason', None)!r}); refusing to persist an "
+                "empty description."
+            )
+        return text
