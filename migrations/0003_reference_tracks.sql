@@ -90,7 +90,10 @@ create table reference_context (
     vibe_description text   not null,            -- LLM prose: mood / space / era / texture / energy
 
     analyzer_version text not null,              -- bumped when the extractor/checkpoint changes
-    created_at_ms    bigint not null
+    -- The analyzer's output type (`ReferenceContext`) carries no timestamp, so the writer would have
+    -- to source this out-of-band on every insert. Default it to wall-clock epoch-ms so the writer
+    -- cannot forget it and violate NOT NULL; an explicit value (if ever supplied) still wins.
+    created_at_ms    bigint not null default (extract(epoch from now()) * 1000)::bigint
 );
 
 -- ---------------------------------------------------------------------------------------------
