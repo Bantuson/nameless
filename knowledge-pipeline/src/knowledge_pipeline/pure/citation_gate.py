@@ -168,10 +168,15 @@ def citation_gate(
         # ---- R3: no asserted number may be absent from a cited source quote ----
         # Digit-form AND spelled-out cardinals (WR-02): "three hundred hertz" is just as much an invented
         # value as "300 Hz", so both forms are extracted on each side and compared with the same set diff.
+        # Evidence = the cited claims' quote AND claim_text (WR-03): R4's coverage check already unions both,
+        # but R3 used quote-only — an asymmetry that false-rejected legitimate template skills (built from
+        # claim_text) whenever an auto-caption garbled the number in the quote while claim_text carried it
+        # clean. The two rules now agree on what "the evidence" is.
         asserted_numbers = _all_numbers(section.body)
         evidence_numbers: set[str] = set()
         for c in cited_claims:
             evidence_numbers |= _all_numbers(c.quote)
+            evidence_numbers |= _all_numbers(c.claim_text)
         invented = asserted_numbers - evidence_numbers
         if invented:
             rejections.append(

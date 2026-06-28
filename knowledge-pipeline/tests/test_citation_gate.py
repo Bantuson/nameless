@@ -74,6 +74,21 @@ def test_a_number_present_in_the_cited_quote_is_allowed():
     assert citation_gate(claims=claims, draft=draft).ok is True
 
 
+def test_number_clean_in_claim_text_but_garbled_in_quote_still_grounds():
+    # WR-03: a template body is built from claim_text; auto-captions routinely garble the number in the
+    # quote. R3 now unions claim_text + quote (like R4), so a clean claim_text number is NOT false-rejected.
+    claim = make_claim(
+        claim_text="Keep the sub in mono below 120 Hz.",
+        quote="keep the sub in mono below the low end",  # the caption dropped/garbled the '120'
+        technique="sub-bass-highpass", stage="bassline", video="dh", ts_ms=2000,
+    )
+    claims = {claim.id: claim}
+    draft = make_draft([claim], default_body="Keep the sub in mono below 120 Hz.")
+    result = citation_gate(draft, claims)
+    assert result.ok is True
+    assert RejectionCode.INVENTED_NUMBER.value not in result.codes
+
+
 # ---- REJECT: uncited assertion -----------------------------------------------------------------
 
 
