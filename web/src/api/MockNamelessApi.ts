@@ -306,6 +306,10 @@ export class MockNamelessApi implements NamelessApi {
   // ---- project graph + credits (UI-04) ----
 
   async getProjectGraph(projectId: Uuid): Promise<ProjectGraph> {
+    // Match the server's `CliError::NotFound` contract (Http maps a 404 to `NotFoundError`) instead
+    // of silently returning an empty graph for an unknown project — keeps Mock/Http behavior in
+    // parity so `ProjectScreen`'s error branch is actually exercised.
+    this.requireProject(projectId);
     const nodes: FragmentNode[] = this.state.fragments
       .filter((f) => f.project_id === projectId)
       .map((f) => ({
@@ -322,6 +326,9 @@ export class MockNamelessApi implements NamelessApi {
   }
 
   async getCredits(projectId: Uuid): Promise<Credits> {
+    // Parity with the server: an unknown project is a NotFound, not a credits sheet titled with the
+    // raw id (see getProjectGraph). The fallback title now only covers the guaranteed-present row.
+    this.requireProject(projectId);
     const project = this.state.projects.find((p) => p.id === projectId);
     const title = project?.title ?? projectId;
     const samples: CreditSample[] = this.state.attributions

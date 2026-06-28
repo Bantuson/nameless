@@ -27,4 +27,13 @@ describe('ProjectScreen (UI-04)', () => {
     // The non-negotiable honesty line is present (banner + the rendered markdown sheet).
     expect(screen.getAllByText(/Attribution is not permission/i).length).toBeGreaterThan(0);
   });
+
+  it('surfaces a NotFound error for an unknown active project (Mock/Http parity, WR-04)', async () => {
+    // An active project the Mock has never heard of — getProjectGraph/getCredits now throw
+    // NotFoundError like the real server's 404, exercising the screen's error branch.
+    renderWithApi(<ProjectScreen />, { activeProjectId: 'ffffffff-ffff-ffff-ffff-ffffffffffff' });
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts.length).toBeGreaterThanOrEqual(1);
+    expect(alerts.some((el) => /not found/i.test(el.textContent ?? ''))).toBe(true);
+  });
 });
