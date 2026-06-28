@@ -21,14 +21,21 @@ use nameless_adapters::{
 use crate::error::CliError;
 
 /// The assembled control-plane adapters a command runs against.
+///
+/// The ports are boxed as `dyn Trait + Send + Sync` so a `Plane` is itself `Send + Sync` and can be
+/// shared across threads behind an `Arc` — which is exactly what the Phase-10 axum server needs
+/// (`AppState { plane: Arc<Plane> }` must be `Clone + Send + Sync`). Every concrete adapter is
+/// already thread-safe (the in-memory/file fakes hold a `Mutex` or a `PathBuf`; the Postgres/S3
+/// adapters own a Tokio runtime + connection pool), so the bound costs nothing here and is purely
+/// additive — the synchronous CLI path is unaffected.
 pub struct Plane {
-    pub store: Box<dyn ObjectStore>,
-    pub repo: Box<dyn FragmentRepo>,
-    pub queue: Box<dyn JobQueue>,
+    pub store: Box<dyn ObjectStore + Send + Sync>,
+    pub repo: Box<dyn FragmentRepo + Send + Sync>,
+    pub queue: Box<dyn JobQueue + Send + Sync>,
     /// Reference-track persistence (Phase 7) — uploads, context summaries, project links.
-    pub references: Box<dyn ReferenceStore>,
+    pub references: Box<dyn ReferenceStore + Send + Sync>,
     /// Stem library + sample attribution persistence (Phase 8) — one store, both ports.
-    pub samples: Box<dyn SampleStore>,
+    pub samples: Box<dyn SampleStore + Send + Sync>,
 }
 
 /// Default bounded capacity for the `--local` in-memory queue.

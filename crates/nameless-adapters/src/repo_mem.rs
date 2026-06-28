@@ -43,6 +43,18 @@ impl FragmentRepo for InMemoryFragmentRepo {
         Ok(())
     }
 
+    fn list_projects(&self) -> Result<Vec<Project>, RepoError> {
+        let inner = self.lock()?;
+        // Newest-first by creation time (the HashMap has no stable order; sort explicitly).
+        let mut out: Vec<Project> = inner.projects.values().cloned().collect();
+        out.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+        Ok(out)
+    }
+
+    fn get_project(&self, id: ProjectId) -> Result<Option<Project>, RepoError> {
+        Ok(self.lock()?.projects.get(&id).cloned())
+    }
+
     fn insert_fragment(&self, f: &Fragment) -> Result<(), RepoError> {
         let mut inner = self.lock()?;
         if inner.fragments.insert(f.id, f.clone()).is_none() {
@@ -119,6 +131,19 @@ mod tests {
             .get_fragment(FragmentId::new())
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn list_and_get_projects() {
+        let repo = InMemoryFragmentRepo::new();
+        assert!(repo.list_projects().unwrap().is_empty());
+        let a = Project::new("a".into());
+        let b = Project::new("b".into());
+        repo.insert_project(&a).unwrap();
+        repo.insert_project(&b).unwrap();
+        assert_eq!(repo.list_projects().unwrap().len(), 2);
+        assert_eq!(repo.get_project(a.id).unwrap().unwrap().id, a.id);
+        assert!(repo.get_project(ProjectId::new()).unwrap().is_none());
     }
 
     #[test]

@@ -226,6 +226,21 @@ impl From<RightsArg> for RightsStatus {
     }
 }
 
+impl From<RightsStatus> for RightsArg {
+    /// The reverse mapping (Phase 10): the HTTP API receives a `rights` value already typed as the
+    /// domain [`RightsStatus`] (serde-deserialized from the request body) and needs to hand
+    /// [`SampleAddArgs`] — the shared `do_sample_add` input — a [`RightsArg`]. Lives here, beside the
+    /// forward conversion, so both halves of the mapping stay in one place.
+    fn from(r: RightsStatus) -> Self {
+        match r {
+            RightsStatus::CopyrightedUncleared => RightsArg::CopyrightedUncleared,
+            RightsStatus::RoyaltyFree => RightsArg::RoyaltyFree,
+            RightsStatus::OwnWork => RightsArg::OwnWork,
+            RightsStatus::Unknown => RightsArg::Unknown,
+        }
+    }
+}
+
 /// clap value-enum mirror of [`ReferenceRole`] for `--role` (accepts `vibe` / `sonic-target`).
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[clap(rename_all = "kebab-case")]
@@ -323,8 +338,7 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Project { action } => match action {
             ProjectAction::Create { title } => {
-                let project = Project::new(title);
-                plane.repo.insert_project(&project)?;
+                let project = do_create_project(&plane, title)?;
                 output::print_project_created(&project, cli.json);
                 Ok(())
             }
@@ -413,6 +427,16 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
     }
 }
 
+/// Create a new project and persist it. Factored out (Phase 10) so both the CLI `project create`
+/// handler and the HTTP `POST /projects` handler mint + insert a project the same way — there is no
+/// integrity logic here, just the canonical `Project::new` constructor + the repo write, shared so
+/// the two front-ends cannot drift. The caller is responsible for rejecting a blank title.
+pub fn do_create_project(plane: &Plane, title: String) -> Result<Project, CliError> {
+    let project = Project::new(title);
+    plane.repo.insert_project(&project)?;
+    Ok(project)
+}
+
 /// Enqueue stem separation for an uploaded reference track. Fails clearly if the track does not
 /// exist. The Python `DemucsStemSeparator` consumes the job, retains every stem by content-hash, and
 /// writes the `stems` index rows (SAMP-01).
@@ -481,10 +505,12 @@ pub fn do_sample_add(
         rights_status: Some(args.rights.into()),
     };
 
-    // THE HARD GATE: validate completeness BEFORE creating anything (SAMP-03).
+    // THE HARD GATE: validate completeness BEFORE creating anything (SAMP-03). The typed
+    // `IncompleteAttribution` (its `missing: Vec<AttributionField>`) flows straight into `CliError`
+    // so the HTTP layer can serialize the field names without re-deriving them.
     let complete = partial
         .into_complete()
-        .map_err(|e| CliError::IncompleteAttribution(e.to_string()))?;
+        .map_err(CliError::IncompleteAttribution)?;
 
     // Create the sampled fragment. CONTRACT: the fragment's `audio_uri` points at the FULL stem, so
     // its `duration_ms` describes the full stem too (carried straight from the stem) — NOT the slice
@@ -550,20 +576,29 @@ pub fn do_reference_upload(
         path: args.path.display().to_string(),
         source,
     })?;
+    do_reference_upload_bytes(plane, args.title.clone(), args.artist.clone(), &bytes)
+}
 
+/// The reference-upload core over raw BYTES — the transport-agnostic heart of `do_reference_upload`.
+///
+/// The CLI reaches this by reading a file path; the Phase-10 HTTP API reaches it with the bytes of a
+/// multipart `file` part. Identical thereafter: content-address + store immutably (de-duplicating,
+/// shared with capture + the stem library), probe for duration/sample-rate, persist the
+/// `ReferenceTrack`, and enqueue exactly one `AnalyzeReference` job. The track is NOT a fragment and
+/// never enters the state machine (REF-01/REF-03). Returns the new track + the enqueued job id.
+pub fn do_reference_upload_bytes(
+    plane: &Plane,
+    title: Option<String>,
+    artist: Option<String>,
+    bytes: &[u8],
+) -> Result<(ReferenceTrack, JobId), CliError> {
     // Content-address + store immutably (same path/contract as capture).
-    let key = content_hash(&bytes);
-    plane.store.put(&key, &bytes)?;
+    let key = content_hash(bytes);
+    plane.store.put(&key, bytes)?;
 
-    let p = probe(&bytes);
+    let p = probe(bytes);
 
-    let track = ReferenceTrack::new_upload(
-        key,
-        args.title.clone(),
-        args.artist.clone(),
-        p.duration_ms,
-        p.sample_rate,
-    );
+    let track = ReferenceTrack::new_upload(key, title, artist, p.duration_ms, p.sample_rate);
     plane.references.insert_track(&track)?;
 
     // Enqueue the NON-melodic context-extraction job (the Python restricted analyzer handles it).
@@ -586,22 +621,38 @@ pub fn do_capture(plane: &Plane, args: &CaptureArgs) -> Result<(Fragment, JobId)
         path: args.path.display().to_string(),
         source,
     })?;
-
-    // Content-address + store immutably (de-duplicating; same bytes → same uri).
-    let key = content_hash(&bytes);
-    plane.store.put(&key, &bytes)?;
-
-    // Best-effort probe; capture stores the bytes regardless of probe success.
-    let p = probe(&bytes);
-
-    let frag = Fragment::new_capture(
+    do_capture_bytes(
+        plane,
         args.project,
         args.kind.into(),
-        key,
-        p.duration_ms,
-        p.sample_rate,
         args.note.clone(),
-    );
+        &bytes,
+    )
+}
+
+/// The capture core over raw BYTES — the transport-agnostic heart of `do_capture`.
+///
+/// The CLI reaches this by reading a file path; the Phase-10 HTTP API reaches it with the bytes of a
+/// multipart `file` part (`POST /projects/:id/fragments`). Identical thereafter: store the bytes
+/// immutably by content hash (de-duplicating), probe for duration/sample-rate, persist the fragment
+/// in `Captured` state, and enqueue exactly one `FeatureExtract` job. Returns the new fragment + the
+/// enqueued job id. Does NOT check that `project` exists — the caller validates that (the CLI takes a
+/// trusted id; the HTTP handler 404s first) so this core stays a pure write path.
+pub fn do_capture_bytes(
+    plane: &Plane,
+    project: ProjectId,
+    kind: FragmentKind,
+    note: String,
+    bytes: &[u8],
+) -> Result<(Fragment, JobId), CliError> {
+    // Content-address + store immutably (de-duplicating; same bytes → same uri).
+    let key = content_hash(bytes);
+    plane.store.put(&key, bytes)?;
+
+    // Best-effort probe; capture stores the bytes regardless of probe success.
+    let p = probe(bytes);
+
+    let frag = Fragment::new_capture(project, kind, key, p.duration_ms, p.sample_rate, note);
     plane.repo.insert_fragment(&frag)?;
 
     // Enqueue downstream feature extraction (Phase 1 enqueues only — no consumer runs).
@@ -971,9 +1022,15 @@ mod tests {
         };
         let err = do_sample_add(&plane, &args).unwrap_err();
         match err {
-            CliError::IncompleteAttribution(msg) => {
+            // The variant now carries the TYPED `IncompleteAttribution` (its `missing` field list),
+            // not a pre-rendered string; its `Display` still joins the same human message the CLI
+            // prints, and the typed fields are what the HTTP layer serializes.
+            CliError::IncompleteAttribution(ref e) => {
+                let msg = e.to_string();
                 assert!(msg.contains("source_title"));
                 assert!(msg.contains("artist"));
+                assert!(e.missing.contains(&nameless_core::attribution::AttributionField::SourceTitle));
+                assert!(e.missing.contains(&nameless_core::attribution::AttributionField::SourceArtist));
             }
             other => panic!("expected IncompleteAttribution, got {other:?}"),
         }

@@ -49,6 +49,20 @@ pub trait FragmentRepo {
     /// Insert a project.
     fn insert_project(&self, p: &Project) -> Result<(), RepoError>;
 
+    /// List every project (newest-first encouraged; callers needing order should sort).
+    ///
+    /// Added for the control-plane HTTP API's `GET /projects` aggregation (Phase 10), which the
+    /// interactive surface needs but the CLI never did (the CLI only ever *creates* a project then
+    /// addresses it by id). Read-only; the in-memory/file/Postgres adapters already retain projects.
+    fn list_projects(&self) -> Result<Vec<Project>, RepoError>;
+
+    /// Fetch a single project by id, or `Ok(None)` if it does not exist.
+    ///
+    /// Added (Phase 10) so the HTTP API can return `CliError::NotFound` for an unknown project —
+    /// the same parity the web `MockNamelessApi` enforces (capture/graph/credits/attach/sample all
+    /// 404 on an unknown project) — instead of silently operating on a non-existent container.
+    fn get_project(&self, id: ProjectId) -> Result<Option<Project>, RepoError>;
+
     /// Insert a fragment.
     fn insert_fragment(&self, f: &Fragment) -> Result<(), RepoError>;
 

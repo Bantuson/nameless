@@ -84,6 +84,19 @@ impl FragmentRepo for FileFragmentRepo {
         self.store(&db)
     }
 
+    fn list_projects(&self) -> Result<Vec<Project>, RepoError> {
+        let db = self.load()?;
+        // Newest-first by creation time (stored order is insertion order; sort explicitly).
+        let mut out = db.projects;
+        out.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
+        Ok(out)
+    }
+
+    fn get_project(&self, id: ProjectId) -> Result<Option<Project>, RepoError> {
+        let db = self.load()?;
+        Ok(db.projects.into_iter().find(|p| p.id == id))
+    }
+
     fn insert_fragment(&self, f: &Fragment) -> Result<(), RepoError> {
         let mut db = self.load()?;
         db.version = DB_VERSION;
@@ -178,5 +191,23 @@ mod tests {
         let path = temp_db("absent");
         let repo = FileFragmentRepo::new(&path);
         assert_eq!(repo.list_fragments(None).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn projects_persist_and_are_listable_and_gettable() {
+        let path = temp_db("projects");
+        let a = Project::new("a".into());
+        let b = Project::new("b".into());
+        {
+            let repo = FileFragmentRepo::new(&path);
+            repo.insert_project(&a).unwrap();
+            repo.insert_project(&b).unwrap();
+        }
+        // A fresh instance over the same file reads both back.
+        let repo = FileFragmentRepo::new(&path);
+        assert_eq!(repo.list_projects().unwrap().len(), 2);
+        assert_eq!(repo.get_project(b.id).unwrap().unwrap().title, "b");
+        assert!(repo.get_project(ProjectId::new()).unwrap().is_none());
+        let _ = fs::remove_file(&path);
     }
 }

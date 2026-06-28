@@ -124,6 +124,46 @@ impl FragmentRepo for PostgresFragmentRepo {
         Ok(())
     }
 
+    fn list_projects(&self) -> Result<Vec<Project>, RepoError> {
+        let rows = self
+            .rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"select id, title, created_at_ms from projects order by created_at_ms desc"#,
+                )
+                .fetch_all(&self.pool)
+                .await
+            })
+            .map_err(|e| RepoError::Backend(e.to_string()))?;
+        Ok(rows
+            .into_iter()
+            .map(|r| Project {
+                id: ProjectId(r.id),
+                title: r.title,
+                created_at_ms: r.created_at_ms,
+            })
+            .collect())
+    }
+
+    fn get_project(&self, id: ProjectId) -> Result<Option<Project>, RepoError> {
+        let row = self
+            .rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"select id, title, created_at_ms from projects where id = $1"#,
+                    id.0,
+                )
+                .fetch_optional(&self.pool)
+                .await
+            })
+            .map_err(|e| RepoError::Backend(e.to_string()))?;
+        Ok(row.map(|r| Project {
+            id: ProjectId(r.id),
+            title: r.title,
+            created_at_ms: r.created_at_ms,
+        }))
+    }
+
     fn insert_fragment(&self, f: &Fragment) -> Result<(), RepoError> {
         // Bind enum labels as text and cast text→enum in SQL (compile-time-checked, injection-safe).
         let provenance = f.provenance().as_str();

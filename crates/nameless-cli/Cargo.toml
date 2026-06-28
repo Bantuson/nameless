@@ -6,6 +6,12 @@ license.workspace = true
 rust-version.workspace = true
 description = "The `nameless` control-plane CLI: project/capture/fragments, compact-by-default."
 
+# Library surface (Phase 10): exposes `cli`/`profile`/`output`/`error` so `nameless-api` can reuse
+# `build_plane`, `Plane`, and the `do_*` control-plane use-cases instead of duplicating them.
+[lib]
+name = "nameless_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "nameless"
 path = "src/main.rs"
