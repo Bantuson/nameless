@@ -1,0 +1,39 @@
+[package]
+name = "nameless-api"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The Nameless control-plane HTTP API (axum 0.8) — a thin veneer over the nameless-cli use-cases that exposes the exact contract the web UI's HttpNamelessApi was written against."
+
+[[bin]]
+name = "nameless-api"
+path = "src/main.rs"
+
+[dependencies]
+# Reuse the domain, the adapters, and — crucially — the control-plane use-cases + Plane wiring from
+# the CLI library, so the HTTP server is a transport veneer, not a re-implementation of the gate.
+nameless-core = { path = "../nameless-core" }
+nameless-adapters = { path = "../nameless-adapters" }
+nameless-cli = { path = "../nameless-cli" }
+
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+# `net` (TcpListener) + the workspace defaults (rt-multi-thread, macros) are what `axum::serve` and
+# `#[tokio::main]` need. `spawn_blocking` (sync ports over async handlers) ships with the rt.
+tokio = { workspace = true, features = ["net"] }
+
+[dev-dependencies]
+# `tower::ServiceExt::oneshot` drives the router in-process for the integration tests — no socket,
+# no DB, no worker. `serde_json` parses the response bodies.
+tower = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = []
+# Wire the SERVER Plane (Postgres + sqlxmq + S3/R2) by propagating to the CLI's server profile.
+# The default build serves ONLY the `--local` (filesystem + in-memory) profile, so it stays lean
+# and buildable on the 4GB box (no tokio-sqlx, no S3 client).
+postgres = ["nameless-cli/postgres"]

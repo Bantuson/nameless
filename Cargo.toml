@@ -23,6 +23,7 @@ members = [
     "crates/nameless-core",
     "crates/nameless-adapters",
     "crates/nameless-cli",
+    "crates/nameless-api",
 ]
 
 [workspace.package]
@@ -46,3 +47,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "macros"] }
 sqlxmq = "0.5"
 rust-s3 = "0.35"
+# Control-plane HTTP API (nameless-api). axum 0.8 is the current stable line; `multipart`
+# enables the file-upload extractor for capture + reference upload. `tower` is used by the
+# crate's tests (ServiceExt::oneshot) to drive the router with no network/DB.
+axum = { version = "0.8", features = ["multipart"] }
+# `util` enables `ServiceExt::oneshot`, which the nameless-api tests use to drive the router with no
+# socket. tower 0.5's default feature set is empty, so the feature must be requested explicitly.
+tower = { version = "0.5", features = ["util"] }
