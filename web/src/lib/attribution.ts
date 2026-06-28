@@ -11,6 +11,13 @@
  * The rule matches Rust precisely, including:
  *   - a blank/whitespace-only title or artist counts as MISSING (an empty credit is not a credit);
  *   - a time range needs both ends AND a positive span (`end > start`), else `time_range` is missing.
+ *
+ * Client-side tightening (IN-02): a negative `start_ms` is also rejected here (`start >= 0`), since a
+ * negative source offset is nonsensical and the numeric input can be typed/pasted past its `min={0}`.
+ * This is intentionally STRICTER than the current Rust rule (which only checks `end > start`) — the
+ * client can only ever refuse to send, never forge a credit, so it stays integrity-safe. The Rust
+ * `PartialAttribution::missing_fields` SHOULD mirror `start >= 0` to close the shared spec gap.
+ * FLAG-FOR-HUMAN / [env-gated]: server mirror is unverifiable here (the axum backend does not run).
  */
 
 import type { AttributionField } from '../api/types';
@@ -40,7 +47,7 @@ export function missingAttributionFields(p: PartialAttribution): AttributionFiel
   if (blank(p.sourceArtist)) missing.push('source_artist');
   if (!p.stemType) missing.push('stem_type');
   const { startMs, endMs } = p;
-  const validRange = startMs != null && endMs != null && endMs > startMs;
+  const validRange = startMs != null && endMs != null && startMs >= 0 && endMs > startMs;
   if (!validRange) missing.push('time_range');
   if (!p.rights) missing.push('rights');
   return missing;

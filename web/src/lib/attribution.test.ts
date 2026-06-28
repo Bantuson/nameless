@@ -42,6 +42,11 @@ describe('missingAttributionFields (pure port of the Rust completeness rule)', (
     expect(missingAttributionFields({ ...full, startMs: 20_000, endMs: 10_000 })).toEqual(['time_range']);
   });
 
+  it('rejects a negative start offset (IN-02 client-side tightening)', () => {
+    expect(missingAttributionFields({ ...full, startMs: -100, endMs: 100 })).toEqual(['time_range']);
+    expect(missingAttributionFields({ ...full, startMs: 0, endMs: 100 })).toEqual([]);
+  });
+
   it('flags a missing rights status', () => {
     expect(missingAttributionFields({ ...full, rights: null })).toEqual(['rights']);
   });
