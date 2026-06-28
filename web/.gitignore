@@ -1,0 +1,12 @@
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Vitest / coverage
+coverage/
+
+# Editor
+*.tsbuildinfo
+.vite/
