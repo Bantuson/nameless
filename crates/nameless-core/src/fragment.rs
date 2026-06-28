@@ -307,8 +307,35 @@ impl Fragment {
     /// A driver that places a sample loads its [`crate::attribution::SampleAttribution`] row and
     /// passes `Some(&row.attribution)` — and since that row can only exist as a complete value, the
     /// gate is satisfiable exactly when (and only when) the sample is fully credited.
+    ///
+    /// For the sampled path prefer [`Fragment::place_sampled`], whose signature makes the
+    /// completeness proof *mandatory by type* (no `Option` to accidentally pass `None`).
     pub fn place(&mut self, attribution: Option<&CompleteAttribution>) -> Result<(), PlaceError> {
         let next = place(self.provenance, self.state, attribution)?;
+        self.state = next;
+        Ok(())
+    }
+
+    /// Place a `sampled` fragment — the by-construction door for the attribution gate (SAMP-03).
+    ///
+    /// Where [`Fragment::place`] takes `Option<&CompleteAttribution>` (so non-sampled material can
+    /// place with `None`), THIS method takes a non-optional `&CompleteAttribution`: the completeness
+    /// proof is required by the *type of the call*, not by a runtime `is_none()` check a caller might
+    /// route around. Combined with the private `state` field (no setter), `apply` refusing
+    /// `(Sampled, Place)`, and the free [`crate::state_machine::transition`]/`place` functions being
+    /// callable only inside this crate, this is the single path that can write `Placed` onto a
+    /// sample — and it cannot be invoked without a value that, by construction, has every credited
+    /// field. The "incomplete-attribution placement is unrepresentable" claim is therefore structural,
+    /// not conventional. (Non-`Sampled` provenance is rejected here with
+    /// [`crate::state_machine::IllegalTransition`] so this door stays sample-only.)
+    pub fn place_sampled(&mut self, attribution: &CompleteAttribution) -> Result<(), PlaceError> {
+        if self.provenance != Provenance::Sampled {
+            return Err(PlaceError::Illegal(IllegalTransition {
+                from: self.state,
+                transition: Transition::Place,
+            }));
+        }
+        let next = place(self.provenance, self.state, Some(attribution))?;
         self.state = next;
         Ok(())
     }

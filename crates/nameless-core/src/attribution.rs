@@ -14,9 +14,19 @@
 //! * [`CompleteAttribution`] — every field is **non-`Option`**. It is therefore *structurally
 //!   incapable* of representing a missing field. The ONLY way to obtain one from user input is
 //!   [`PartialAttribution::into_complete`], which validates and, on success, hands back the proof.
-//! * The sampled-placement gate ([`crate::state_machine::place`]) requires a `&CompleteAttribution`.
-//!   A `sampled` fragment with only partial attribution simply has no value of the required type to
-//!   pass — there is no bypass to forget, because the bypass cannot be spelled.
+//! * The sampled-placement gate ([`crate::state_machine::place`], reached via
+//!   [`crate::fragment::Fragment::place_sampled`]) requires a `&CompleteAttribution`. A `sampled`
+//!   fragment with only partial attribution simply has no value of the required type to pass — there
+//!   is no bypass to forget, because the bypass cannot be spelled.
+//!
+//! This "cannot be spelled" claim is **structural, not conventional**, and rests on three facts that
+//! together leave exactly one door:
+//!   1. `Fragment::{state, provenance}` are private with no setter, so no caller can assign `Placed`
+//!      directly (`frag.state = …` does not compile outside [`crate::fragment`]).
+//!   2. `Fragment::apply` refuses `(Sampled, Place)`, and [`crate::fragment::Fragment::place_sampled`]
+//!      takes a non-`Option` `&CompleteAttribution`, so the sample door demands the proof by type.
+//!   3. The free `transition`/`place` functions are crate-internal — no driver in `nameless-cli` /
+//!      `nameless-adapters` can call them to compute (let alone write) a placed state.
 //!
 //! This is the same rigour the PRD applies to the eval gate, expressed for attribution: the absence
 //! of a constructor for an *incomplete* `CompleteAttribution` is the guarantee.

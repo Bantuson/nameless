@@ -467,6 +467,46 @@ mod tests {
         assert_eq!(f.state(), Placed);
     }
 
+    /// `place_sampled` is the by-construction sampled door: its signature requires the completeness
+    /// proof (no `Option`), so a sample cannot be placed without a `CompleteAttribution` value — and
+    /// the door rejects non-sampled provenance so it stays sample-only.
+    #[test]
+    fn test_place_sampled_requires_complete_attribution_by_type() {
+        use crate::fragment::{Fragment, FragmentKind, ProjectId};
+        let mut f = Fragment::new_sampled(
+            ProjectId::new(),
+            "stemhash".into(),
+            None,
+            None,
+            "sampled vocal chop".into(),
+        );
+        f.apply(Analyze).unwrap();
+        f.apply(MarkAnalyzed).unwrap();
+        assert_eq!(f.state(), Analyzed);
+
+        // The proof is mandatory by type — there is no `None` to pass. Placing succeeds with it.
+        let attr = complete_attr();
+        f.place_sampled(&attr).unwrap();
+        assert_eq!(f.state(), Placed);
+
+        // The sampled door refuses non-sampled material (it is sample-only).
+        let mut h = Fragment::new_capture(
+            ProjectId::new(),
+            FragmentKind::Hook,
+            "h".into(),
+            None,
+            None,
+            "hook".into(),
+        );
+        h.apply(Analyze).unwrap();
+        h.apply(MarkAnalyzed).unwrap();
+        assert!(matches!(
+            h.place_sampled(&attr),
+            Err(PlaceError::Illegal(_))
+        ));
+        assert_eq!(h.state(), Analyzed);
+    }
+
     /// A non-sampled fragment can still place via BOTH apply and the gate (no regression).
     #[test]
     fn test_human_place_unaffected_by_gate() {
