@@ -13,6 +13,8 @@ the consumer is. Both bindings call the SAME :meth:`AnalyzeJobConsumer.handle`. 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
 
 from pydantic import ValidationError
@@ -25,12 +27,38 @@ from .ports import JobSource
 logger = logging.getLogger("nameless_workers.runner")
 
 
-def run_once(source: JobSource, consumer: AnalyzeJobConsumer) -> Optional[AnalyzeOutcome]:
-    """Process at most one job. Returns the outcome on success, or ``None`` if the queue was empty
-    or the job was retried/skipped."""
+class RunStatus(str, Enum):
+    """What one :func:`run_once` claim did — the signal :func:`run_forever` drives its idle policy off.
+
+    Distinguishing these from a *single* ``poll()`` is the WR-02 fix: previously ``run_forever`` polled
+    a second time to tell "queue empty" apart from "job retried", which under a real claim-semantics
+    ``poll()`` (``SELECT … FOR UPDATE SKIP LOCKED``) claimed-and-discarded a second job's lease.
+    """
+
+    IDLE = "idle"  # the queue was empty — nothing was claimed this cycle
+    DID_WORK = "did_work"  # a job was claimed and resolved (analyzed, or acked-to-drop) — drain on
+    RETRIED = "retried"  # a job was claimed but deferred for another attempt (do not hot-loop on it)
+
+
+@dataclass(frozen=True)
+class RunResult:
+    """The outcome of one :func:`run_once` cycle: a :class:`RunStatus` plus the analysis outcome
+    (present only on a successful ``DID_WORK`` analysis; ``None`` for idle/retry/drop/misroute)."""
+
+    status: RunStatus
+    outcome: Optional[AnalyzeOutcome] = None
+
+
+def run_once(source: JobSource, consumer: AnalyzeJobConsumer) -> RunResult:
+    """Process at most one job, claiming it with a SINGLE :meth:`JobSource.poll`.
+
+    Returns a :class:`RunResult` whose :class:`RunStatus` tells the caller whether the queue was empty
+    (``IDLE``), a job was processed/dropped (``DID_WORK``), or a job was deferred for retry
+    (``RETRIED``) — without ever polling a second time (WR-02).
+    """
     lease = source.poll()
     if lease is None:
-        return None
+        return RunResult(RunStatus.IDLE)
 
     envelope = lease.envelope
     if not isinstance(envelope, FeatureExtractJob):
@@ -38,7 +66,7 @@ def run_once(source: JobSource, consumer: AnalyzeJobConsumer) -> Optional[Analyz
         # (e.g. a Phase-8 Separate job). Ack so it does not loop here; its own consumer owns it.
         logger.warning("ignoring non-feature job on the feature worker: %r", envelope)
         source.ack(lease)
-        return None
+        return RunResult(RunStatus.DID_WORK)
 
     try:
         outcome = consumer.handle(envelope)
@@ -47,7 +75,7 @@ def run_once(source: JobSource, consumer: AnalyzeJobConsumer) -> Optional[Analyz
         # queue's bounded RetryPolicy retry/dead-letter. A redeliver re-enters via the idempotency path.
         logger.warning("analysis failed (will retry): %s", exc)
         source.retry(lease)
-        return None
+        return RunResult(RunStatus.RETRIED)
     except (IllegalTransition, ValidationError) as exc:
         # PERMANENTLY un-analyzable, not a transient fault — and unrelated to AnalyzeError:
         #   * IllegalTransition: a placed/mixed/ai-path/rejected (or concurrently-advanced) fragment is
@@ -57,17 +85,17 @@ def run_once(source: JobSource, consumer: AnalyzeJobConsumer) -> Optional[Analyz
         # ACK to drop it so one poison/misrouted fragment cannot loop or crash the worker (WR-01).
         logger.error("permanently un-analyzable job, acking to drop: %s", exc)
         source.ack(lease)
-        return None
+        return RunResult(RunStatus.DID_WORK)
     except Exception as exc:  # noqa: BLE001 - last-resort guard: an unexpected fault must not crash run_forever
         # Unknown failure (e.g. KeyError from a row vanishing between get_fragment and advance, or a
         # latent bug). Treat as retryable so the bounded ceiling/dead-letter handles it rather than
         # taking the whole loop down on a single job.
         logger.exception("unexpected error processing job; will retry: %s", exc)
         source.retry(lease)
-        return None
+        return RunResult(RunStatus.RETRIED)
 
     source.ack(lease)
-    return outcome
+    return RunResult(RunStatus.DID_WORK, outcome)
 
 
 def run_forever(
@@ -81,16 +109,26 @@ def run_forever(
 
     ``max_idle_polls`` (if set) stops after that many consecutive empty polls — useful for a bounded
     batch run or a test. ``None`` runs until interrupted.
+
+    The idle counter is driven off the SINGLE claim :func:`run_once` already made (its
+    :class:`RunStatus`), never a second :meth:`JobSource.poll` — so no extra job's lease is claimed and
+    discarded per cycle (WR-02). A ``RETRIED`` job is paced by ``poll_interval_s`` too (so a re-queued
+    job cannot hot-loop), but is not counted as idle since there is still work in flight.
     """
     import time
 
     idle = 0
     while True:
-        outcome = run_once(source, consumer)
-        if outcome is None and source.poll() is None:
+        result = run_once(source, consumer)
+        if result.status is RunStatus.IDLE:
             idle += 1
             if max_idle_polls is not None and idle >= max_idle_polls:
                 return
             time.sleep(poll_interval_s)
-        else:
+        elif result.status is RunStatus.RETRIED:
+            # A job was claimed but deferred. Don't spin re-claiming it; pace by poll_interval. Not
+            # "idle" (there is work), so it does not trip max_idle_polls — the source's retry ceiling
+            # eventually dead-letters a persistently-failing job, after which polls go IDLE and stop.
+            time.sleep(poll_interval_s)
+        else:  # DID_WORK — a job was processed/dropped; there may be more, so drain immediately.
             idle = 0
