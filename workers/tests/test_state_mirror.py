@@ -14,6 +14,7 @@ from nameless_workers.domain.state import (
     FragmentState as S,
     IllegalTransition,
     Transition as T,
+    apply_guarded,
     transition,
 )
 
@@ -107,6 +108,39 @@ def test_illegal_transition_names_the_offending_pair():
     assert err.from_state is S.CAPTURED
     assert err.transition is T.PLACE
     assert "place" in str(err) and "captured" in str(err)
+
+
+def test_apply_guarded_refuses_sampled_place_but_mirrors_transition_otherwise():
+    """CR-01: ``apply_guarded`` is the *mutation*-layer mirror of Rust ``Fragment::apply``.
+
+    It refuses ``(Sampled, PLACE)`` outright — even from ``ANALYZED`` where bare ``transition`` legally
+    yields ``PLACED`` — so the only door to placing a sample is an attribution-checked path (SAMP-03).
+    For every non-sampled provenance, and for every non-PLACE verb, it is transparent: identical to
+    bare ``transition`` (legal edges pass through, illegal edges raise)."""
+    # The sampled-placement refusal: bare transition allows it, the mutation guard does not.
+    assert transition(Provenance.SAMPLED, S.ANALYZED, T.PLACE) is S.PLACED
+    with pytest.raises(IllegalTransition):
+        apply_guarded(Provenance.SAMPLED, S.ANALYZED, T.PLACE)
+
+    # Non-PLACE verbs on a sample are unaffected (analysis path still flows).
+    assert apply_guarded(Provenance.SAMPLED, S.CAPTURED, T.ANALYZE) is S.ANALYZING
+    assert apply_guarded(Provenance.SAMPLED, S.ANALYZING, T.MARK_ANALYZED) is S.ANALYZED
+
+    # Non-sampled placement is unaffected — apply_guarded == transition for every other triple.
+    for p in ALL_PROVENANCE:
+        for frm in ALL_STATES:
+            for t in ALL_TRANSITIONS:
+                if p is Provenance.SAMPLED and t is T.PLACE:
+                    with pytest.raises(IllegalTransition):
+                        apply_guarded(p, frm, t)
+                    continue
+                try:
+                    expected = transition(p, frm, t)
+                except IllegalTransition:
+                    with pytest.raises(IllegalTransition):
+                        apply_guarded(p, frm, t)
+                else:
+                    assert apply_guarded(p, frm, t) is expected, (p, frm, t)
 
 
 def test_labels_match_the_db_enum_strings():

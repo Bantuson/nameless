@@ -135,3 +135,30 @@ def transition(
 
     # ---- everything else is illegal; this arm NEVER returns a state ----
     raise IllegalTransition(from_state=from_state, transition=t)
+
+
+def apply_guarded(
+    provenance: Provenance,
+    from_state: FragmentState,
+    t: Transition,
+) -> FragmentState:
+    """The *mutation* chokepoint — mirrors Rust ``Fragment::apply`` (state_machine.rs / fragment.rs).
+
+    Where :func:`transition` is the bare lifecycle matrix (and faithfully still allows
+    ``(Sampled, ANALYZED, PLACE) → PLACED`` at the *lifecycle* level), this guard adds the extra
+    precondition Rust's ``apply`` enforces ON TOP of it: **``apply`` refuses ``(Sampled, PLACE)``
+    outright** (`fragment.rs`), because placing a sample carries an attribution requirement that a
+    bare advance cannot supply. The ONLY sanctioned door to place a sample is an attribution-checked
+    ``place(Some(&CompleteAttribution))`` (SAMP-03 — "there is no ungated path that writes ``Placed``
+    onto a sample").
+
+    Every repo ``advance()`` routes through THIS function, not bare :func:`transition`, so the Python
+    worker plane cannot drive a ``sampled`` fragment to ``placed`` without going through an
+    attribution-aware path — keeping the Python mutation layer byte-consistent with the stricter Rust
+    mutation layer (closing the CR-01 cross-language gate divergence). For human / ai / derived
+    material the guard is transparent: it falls straight through to :func:`transition`.
+    """
+    if provenance is Provenance.SAMPLED and t is Transition.PLACE:
+        # SAMP-03: a sample reaches Placed only via an attribution-checked place(), never bare advance.
+        raise IllegalTransition(from_state=from_state, transition=t)
+    return transition(provenance, from_state, t)

@@ -119,3 +119,22 @@ def test_advance_missing_fragment_raises():
     repo = InMemoryFragmentRepo()
     with pytest.raises(KeyError):
         repo.advance(uuid4(), Transition.ANALYZE)
+
+
+def test_advance_refuses_placing_an_unattributed_sampled_fragment():
+    """CR-01: the Python mutation chokepoint must mirror Rust ``Fragment::apply`` — placing a
+    ``sampled`` fragment via bare ``advance(PLACE)`` is refused outright (SAMP-03), even though the
+    fragment is fully ``analyzed`` and the bare ``transition`` matrix legally allows the edge. There is
+    no ungated path that writes ``placed`` onto a sample on the Python side, matching Rust."""
+    repo = InMemoryFragmentRepo()
+    rec = make_record(provenance="sampled", state="captured")
+    repo.insert(rec)
+
+    # Sampled travels the human analysis path — analysis verbs are unaffected.
+    assert repo.advance(rec.id, Transition.ANALYZE) == "analyzing"
+    assert repo.advance(rec.id, Transition.MARK_ANALYZED) == "analyzed"
+
+    # BYPASS ATTEMPT: advance(PLACE) on the analyzed sample — refused (Rust parity), state unchanged.
+    with pytest.raises(IllegalTransition):
+        repo.advance(rec.id, Transition.PLACE)
+    assert repo.get_fragment(rec.id).state == "analyzed"

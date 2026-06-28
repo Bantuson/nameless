@@ -24,7 +24,7 @@ import numpy as np
 
 from ..domain.models import AudioFeatures, Embedding, FragmentRecord, SearchHit
 from ..domain.provenance import Provenance
-from ..domain.state import FragmentState, Transition, transition
+from ..domain.state import FragmentState, Transition, apply_guarded
 from ..ports import SearchField, SearchQuery
 
 _FIELD_TO_COLUMN = {
@@ -102,8 +102,9 @@ class PgFragmentRepo:
                     raise KeyError(f"fragment {fragment_id} not found")
                 provenance = Provenance.from_db_str(row[0])
                 current = FragmentState.from_db_str(row[1])
-                # Raises IllegalTransition on an illegal edge — the transaction then rolls back.
-                nxt = transition(provenance, current, t)
+                # apply_guarded() mirrors Rust Fragment::apply: raises IllegalTransition on an illegal
+                # edge AND refuses (Sampled, PLACE) outright (SAMP-03); the transaction then rolls back.
+                nxt = apply_guarded(provenance, current, t)
                 cur.execute(
                     "update fragments set state = %s::text::fragment_state where id = %s",
                     (nxt.value, fragment_id),

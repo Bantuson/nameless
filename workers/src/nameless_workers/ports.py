@@ -89,12 +89,15 @@ class FragmentRepo(Protocol):
     "FeatureStore" role; :meth:`search` is the retrieval role. They live on one object because the
     Postgres implementation backs all three with the same connection/transaction.
 
-    CONTRACT on :meth:`advance`: it MUST apply the same legality rule as the Rust state machine
-    (via :func:`nameless_workers.domain.state.transition`) — read the fragment's
+    CONTRACT on :meth:`advance`: it MUST apply the same *mutation*-layer rule as Rust's
+    ``Fragment::apply`` (via :func:`nameless_workers.domain.state.apply_guarded`, NOT bare
+    :func:`~nameless_workers.domain.state.transition`) — read the fragment's
     ``(provenance, current_state)``, compute the next state, persist it, and raise
-    :class:`~nameless_workers.domain.state.IllegalTransition` on an illegal edge. The worker is thus
-    structurally unable to drive a fragment down an illegal path. (Rust remains canonical; this is the
-    documented mirror — see ``domain/state.py``.)
+    :class:`~nameless_workers.domain.state.IllegalTransition` on an illegal edge. Crucially this
+    refuses ``(Sampled, PLACE)`` outright (SAMP-03): a ``sampled`` fragment can only reach ``placed``
+    through an attribution-checked path, never bare ``advance``. The worker is thus structurally unable
+    to drive a fragment — including a sample — down an ungated path. (Rust remains canonical; this is
+    the documented mirror — see ``domain/state.py``.)
     """
 
     def get_fragment(self, fragment_id: UUID) -> Optional[FragmentRecord]: ...

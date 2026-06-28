@@ -20,7 +20,7 @@ from uuid import UUID
 
 from ..domain.models import AudioFeatures, Embedding, FragmentRecord, SearchHit
 from ..domain.provenance import Provenance
-from ..domain.state import FragmentState, transition
+from ..domain.state import FragmentState, apply_guarded
 from ..ports import SearchField, SearchQuery
 from ..pure.vectors import rank_by_cosine
 
@@ -58,8 +58,9 @@ class InMemoryFragmentRepo:
             raise KeyError(f"fragment {fragment_id} not found")
         provenance = Provenance.from_db_str(stored.record.provenance)
         current = FragmentState.from_db_str(stored.record.state)
-        # transition() raises IllegalTransition on an illegal edge — no silent no-op.
-        nxt = transition(provenance, current, t)
+        # apply_guarded() mirrors Rust Fragment::apply: it raises IllegalTransition on an illegal edge
+        # AND refuses (Sampled, PLACE) outright (SAMP-03) — no silent no-op, no ungated sample placement.
+        nxt = apply_guarded(provenance, current, t)
         stored.record = stored.record.model_copy(update={"state": nxt.value})
         return nxt.value
 
