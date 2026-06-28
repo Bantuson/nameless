@@ -37,3 +37,13 @@ def test_compute_claim_id_stable_and_normalization_insensitive():
     b = compute_claim_id("v", 8000, "high-pass   the sub around 30 hz")
     assert a == b
     assert compute_claim_id("v", 8001, "x") != compute_claim_id("v", 8000, "x")
+
+
+def test_compute_claim_id_incorporates_stance_and_technique():
+    # WR-04: identical source+ts+text but opposing stance => DISTINCT ids (no same-source conflict-collapse).
+    base = compute_claim_id("v", 8000, "adjust 2 khz on the vocal")
+    boost = compute_claim_id("v", 8000, "adjust 2 khz on the vocal", stance="boost")
+    cut = compute_claim_id("v", 8000, "adjust 2 khz on the vocal", stance="cut")
+    assert len({base, boost, cut}) == 3
+    # technique also participates in identity.
+    assert compute_claim_id("v", 8000, "x", technique="a") != compute_claim_id("v", 8000, "x", technique="b")

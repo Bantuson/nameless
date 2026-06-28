@@ -14,8 +14,11 @@ from .conftest import make_claim
 def test_claim_id_is_deterministic_and_content_addressed():
     a = make_claim(video="v", ts_ms=8000, claim_text="High-pass the sub around 30 Hz.")
     b = make_claim(video="v", ts_ms=8000, claim_text="high-pass the sub around 30 hz")  # case/punct only
-    # id is a pure content hash of (video, ts, normalized text) -> the two normalize-equal claims share it
-    assert a.id == b.id == compute_claim_id("v", 8000, "High-pass the sub around 30 Hz.")
+    # id is a pure content hash of (video, ts, normalized text, stance, technique) -> the two
+    # normalize-equal claims (same stance/technique) share it.
+    assert a.id == b.id == compute_claim_id(
+        "v", 8000, "High-pass the sub around 30 Hz.", stance=a.stance, technique=a.technique
+    )
     assert a.id.startswith("clm_")
 
 

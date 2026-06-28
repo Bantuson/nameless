@@ -84,13 +84,28 @@ def topic_key(stage: str, technique: str) -> str:
     return f"{normalize_key(stage)}/{normalize_key(technique)}"
 
 
-def compute_claim_id(source_video_id: str, timestamp_ms: int, claim_text: str) -> str:
+def compute_claim_id(
+    source_video_id: str,
+    timestamp_ms: int,
+    claim_text: str,
+    *,
+    stance: str | None = None,
+    technique: str | None = None,
+) -> str:
     """Deterministic, content-addressed claim id. Pure.
 
-    sha1 over ``video_id | timestamp_ms | normalize_text(claim_text)`` (truncated). Same source +
-    timestamp + (normalized) statement => same id => idempotent upsert + free dedup. The id is never
-    supplied by the model.
+    sha1 over ``video_id | timestamp_ms | normalize_text(claim_text) | stance | technique`` (truncated).
+    Same source + timestamp + (normalized) statement + stance + technique => same id => idempotent
+    upsert + free dedup. The id is never supplied by the model.
+
+    ``stance`` (and ``technique``) are part of the identity basis so two claims from the same source at
+    the same timestamp with identical text but OPPOSING stance (e.g. "boost 2 kHz" vs "cut 2 kHz") get
+    DISTINCT ids and can never silently collapse into one — preserving a same-source conflict instead of
+    laundering it away.
     """
-    basis = f"{source_video_id}|{int(timestamp_ms)}|{normalize_text(claim_text)}"
+    basis = (
+        f"{source_video_id}|{int(timestamp_ms)}|{normalize_text(claim_text)}"
+        f"|{normalize_key(stance)}|{normalize_key(technique)}"
+    )
     digest = hashlib.sha1(basis.encode("utf-8")).hexdigest()
     return f"clm_{digest[:16]}"

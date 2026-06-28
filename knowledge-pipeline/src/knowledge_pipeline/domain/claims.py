@@ -60,8 +60,18 @@ class Claim(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def id(self) -> str:
-        """Content-addressed id: sha1(video_id | timestamp_ms | normalized claim_text). Idempotent."""
-        return compute_claim_id(self.source_video_id, self.timestamp_ms, self.claim_text)
+        """Content-addressed id: sha1(video_id | timestamp_ms | text | stance | technique). Idempotent.
+
+        Stance + technique are in the basis so opposing same-source claims keep distinct ids (no
+        conflict-collapse — see :func:`knowledge_pipeline.domain.keys.compute_claim_id`).
+        """
+        return compute_claim_id(
+            self.source_video_id,
+            self.timestamp_ms,
+            self.claim_text,
+            stance=self.stance,
+            technique=self.technique,
+        )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
