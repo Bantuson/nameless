@@ -67,6 +67,14 @@ def estimate_key(chroma_mean: Sequence[float]) -> KeyEstimate:
     if chroma.shape != (12,):
         raise ValueError(f"chroma_mean must be a length-12 vector, got shape {chroma.shape}")
 
+    # A degenerate chromagram (any NaN/inf, e.g. from librosa on pathological audio) makes every
+    # Pearson r NaN, so no `corr > best_corr` comparison ever fires and the loop would leak the
+    # -2.0 init sentinel — a value outside the documented [-1, 1] confidence range. Treat it as
+    # ambiguous instead: the canonical default key with correlation 0.0 (the same "no signal" floor
+    # _pearson yields for silence). See P2 review IN-01.
+    if not np.all(np.isfinite(chroma)):
+        return KeyEstimate(tonic_pc=0, mode="maj", name=f"{_PITCH_NAMES[0]}:maj", correlation=0.0)
+
     best_corr = -2.0  # below the −1 floor of a real correlation, so any real key wins
     best_tonic = 0
     best_mode = "maj"

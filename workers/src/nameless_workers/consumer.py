@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 
+from . import CLAP_DIM
 from .domain.models import AnalyzeOutcome, FeatureExtractJob
 from .domain.provenance import Provenance
 from .domain.state import FragmentState, IllegalTransition, Transition
@@ -107,6 +108,15 @@ class AnalyzeJobConsumer:
             raise AnalyzeError(
                 f"embedding dim mismatch for {fragment_id}: "
                 f"audio={audio_embedding.dim} note={note_embedding.dim} (not one joint space)"
+            )
+        # ...and that joint width must be CLAP_DIM (512), the `vector(512)` column width. A consistent
+        # but wrong-width embedder (e.g. a swapped 1024-d checkpoint) passes the check above and would
+        # otherwise fail later as an opaque DB insert error; name it here instead. See P2 review IN-02.
+        if audio_embedding.dim != CLAP_DIM:
+            raise AnalyzeError(
+                f"embedding width mismatch for {fragment_id}: "
+                f"embedder produced {audio_embedding.dim}-d vectors, expected CLAP_DIM={CLAP_DIM} "
+                f"(the vector({CLAP_DIM}) joint-space column width)"
             )
 
         # ---- persist (features table + the two vector columns) ----
