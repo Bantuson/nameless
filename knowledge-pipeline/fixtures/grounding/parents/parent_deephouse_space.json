@@ -1,0 +1,20 @@
+{
+  "transcript": {
+    "video_id": "deephouse_space_tut",
+    "caption_source": "manual",
+    "genre": ["deep-house"],
+    "segments": [
+      {"start_s": 10.0, "duration_s": 7.0, "text": "Delay and dub effects are the primary tool for space and texture in deep house."},
+      {"start_s": 30.0, "duration_s": 6.0, "text": "Lay down atmospheric pads as the bed under everything in the arrangement."},
+      {"start_s": 49.0, "duration_s": 7.0, "text": "Pan layered organic percussion across the stereo field to open up the space."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "Use delay and dub effects as the primary tool for space and texture.",
+     "technique": "delay-dub-space", "stage": "atmosphere", "genre": ["deep-house"], "confidence": 0.8},
+    {"segment": 1, "claim_text": "Lay atmospheric pads as the bed under the arrangement.",
+     "technique": "atmospheric-pads", "stage": "atmosphere", "genre": ["deep-house"], "confidence": 0.75},
+    {"segment": 2, "claim_text": "Pan layered organic percussion across the stereo field to open the space.",
+     "technique": "percussion-panning", "stage": "atmosphere", "genre": ["deep-house"], "confidence": 0.75}
+  ]
+}

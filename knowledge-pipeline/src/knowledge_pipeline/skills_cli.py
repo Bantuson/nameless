@@ -2,6 +2,8 @@
 
 Subcommands:
   * ``skills synthesize`` — select P1 cells -> synthesize -> GATE -> emit draft SKILL.md files. [KNOW-07/08/09]
+  * ``skills ground``     — author an UNDER-tutorialized skill (alt-piano) by decomposition + audio analysis,
+                            stamped LOW confidence, behind the SAME gate. [KNOW-10]
   * ``skills list``       — inspect authored skills (``--by-genre`` / ``--by-stage`` / ``--status``).
   * ``skills show``       — one skill: frontmatter + audit roll-up + (optional) the SKILL.md body. [KNOW-09]
   * ``skills audit``      — sample a set with citation coverage + flags (the human spot-audit). [KNOW-11]
@@ -125,6 +127,94 @@ def _build_pipeline(args: argparse.Namespace) -> SynthesisPipeline:
 
 
 # ---------------------------------------------------------------------------------------------
+# Phase-6 grounding plane construction (KNOW-10)
+# ---------------------------------------------------------------------------------------------
+def _grounding_fixture_plane(args: argparse.Namespace):
+    """Offline plane: mine parent fixtures (Phase-4 fakes) + canned audio records -> real fs skill store."""
+    from .adapters import (
+        FakeClaimExtractor,
+        FakeSkillSynthesizer,
+        FakeTrackAnalyzer,
+        InMemoryClaimStore,
+        InMemoryCorpusStore,
+        KeywordSimilarityIndex,
+        SystemClock,
+    )
+    from .adapters.skill_store_fs import FilesystemSkillStore
+    from .grounding_fixtures import load_grounding_fixtures
+    from .mining_pipeline import MineTarget, MiningPipeline
+    from .pure.snapshot import snapshot_record
+
+    fx = load_grounding_fixtures()
+    corpus = InMemoryCorpusStore()
+    clock = SystemClock()
+    for vid, transcript in fx.parents.transcripts.items():
+        corpus.write_snapshot(transcript, snapshot_record(transcript, clock.now()))
+
+    claim_store = InMemoryClaimStore()
+    MiningPipeline(
+        FakeClaimExtractor(scripted=fx.parents.scripted), claim_store, corpus,
+        similarity=KeywordSimilarityIndex(),
+    ).mine([MineTarget(video_id=v, genres=fx.parents.genres.get(v, [])) for v in fx.parents.video_ids])
+
+    synthesizer = FakeSkillSynthesizer()
+    analyzer = FakeTrackAnalyzer(fx.records)
+    db = Path(args.corpus_root) / "registry.sqlite"
+    skill_store = FilesystemSkillStore(db, args.skills_root)
+    return synthesizer, skill_store, claim_store, analyzer, fx.tracks, corpus
+
+
+def _grounding_live_plane(args: argparse.Namespace):
+    """Live plane (env-gated): sqlite parent claims + WorkerTrackAnalyzer over real audio files."""
+    if importlib.util.find_spec("nameless_workers") is None:
+        raise SystemExit(
+            "'nameless_workers' is not importable. Live grounding reuses the Phase-2 audio plane:\n"
+            "  uv pip install -e workers[ml] -e knowledge-pipeline\n"
+            "(or run offline against fixtures with --fixtures). See README 'Verification'."
+        )
+    if not args.tracks_dir:
+        raise SystemExit("live grounding needs --tracks-dir <dir of released-track audio files>.")
+
+    from .adapters.claim_store_sqlite import SqliteClaimStore
+    from .adapters.corpus_fs import FilesystemCorpusStore
+    from .adapters.skill_store_fs import FilesystemSkillStore
+    from .adapters.skill_synthesizer_anthropic import AnthropicSkillSynthesizer
+    from .adapters.track_analyzer_worker import WorkerTrackAnalyzer
+    from .domain.grounding import TrackRef
+
+    tracks_dir = Path(args.tracks_dir)
+    tracks = [
+        TrackRef(track_id=p.stem, artist=p.stem.replace("_", " ").title(), genre="alt-piano", audio_uri=str(p))
+        for p in sorted(tracks_dir.glob("*"))
+        if p.suffix.lower() in {".wav", ".flac", ".mp3", ".m4a", ".ogg"}
+    ]
+    db = Path(args.corpus_root) / "registry.sqlite"
+    corpus = FilesystemCorpusStore(args.corpus_root)
+    corpus.init_schema()
+    claim_store = SqliteClaimStore(db)
+    claim_store.init_schema()
+    synthesizer = AnthropicSkillSynthesizer(model=args.model) if args.real_synth else None
+    if synthesizer is None:
+        from .adapters import FakeSkillSynthesizer  # default: deterministic synth over the live claim set
+        synthesizer = FakeSkillSynthesizer()
+    skill_store = FilesystemSkillStore(db, args.skills_root)
+    return synthesizer, skill_store, claim_store, WorkerTrackAnalyzer(device=args.device), tracks, corpus
+
+
+def _build_grounding_pipeline(args: argparse.Namespace):
+    from .grounding_pipeline import GroundingConfig, GroundingPipeline
+
+    if args.fixtures is not None:
+        synthesizer, skill_store, claim_store, analyzer, tracks, corpus = _grounding_fixture_plane(args)
+    else:
+        synthesizer, skill_store, claim_store, analyzer, tracks, corpus = _grounding_live_plane(args)
+    return GroundingPipeline(
+        synthesizer, skill_store, claim_store, analyzer, tracks,
+        corpus=corpus, config=GroundingConfig(),
+    )
+
+
+# ---------------------------------------------------------------------------------------------
 # Compact formatting
 # ---------------------------------------------------------------------------------------------
 def _fmt_skill_line(s: AuthoredSkill) -> str:
@@ -155,6 +245,35 @@ def _handle_synthesize(args: argparse.Namespace) -> int:
     report = pipeline.synthesize()
     _print_report(report, args.json)
     return 0
+
+
+def _handle_ground(args: argparse.Namespace) -> int:
+    from .pure.decompose import ALT_PIANO_TARGET, decompose, known_targets
+
+    pipeline = _build_grounding_pipeline(args)
+    target = ALT_PIANO_TARGET
+    if args.target:
+        match = next((t for t in known_targets() if t.genre == args.target or t.slug == args.target), None)
+        if match is None:
+            raise SystemExit(
+                f"no decomposition for target '{args.target}'. Known: "
+                f"{', '.join(t.genre for t in known_targets())}"
+            )
+        target = match
+    outcome = pipeline.ground(target)
+    if args.json:
+        print(outcome.model_dump_json(indent=2))
+        return 0
+    decomp = decompose(target)
+    print(f"target={outcome.target}  status={outcome.status}  confidence={outcome.confidence or '-'}")
+    print(f"decomposed into: {', '.join(p.label for p in decomp.parents)}")
+    print(f"tutorial_sources={outcome.tutorial_sources}  audio_tracks={outcome.audio_tracks}  "
+          f"cites={outcome.citation_count}  src={outcome.distinct_sources}")
+    if outcome.status == "authored":
+        print(f"authored {outcome.skill_id}  ({target.relpath})  [LOW — grounded, not direct tutorials]")
+    else:
+        print(f"REJECTED: {'; '.join(outcome.reasons)}")
+    return 0 if outcome.status == "authored" else 1
 
 
 def _handle_list(args: argparse.Namespace) -> int:
@@ -296,6 +415,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_syn.add_argument("--all", action="store_true", help="author ALL evidenced cells, not only the P1 grid")
     p_syn.add_argument("--model", default="claude-opus-4-8", help="(live) Claude model id")
     p_syn.set_defaults(func=_handle_synthesize)
+
+    p_grd = sub.add_parser(
+        "ground",
+        help="author an UNDER-tutorialized skill (alt-piano) by decomposition + audio analysis (KNOW-10)",
+    )
+    _add_roots(p_grd)
+    p_grd.add_argument(
+        "--fixtures", nargs="?", const="", default=None, metavar="DIR",
+        help="OFFLINE end-to-end over the bundled parent claim + audio-record fixtures (default). "
+             "Omit for live env-gated grounding (reuses the workers audio plane).",
+    )
+    p_grd.add_argument("--target", default=None,
+                       help="target subgenre to ground (default: alternative-piano)")
+    p_grd.add_argument("--tracks-dir", default=None,
+                       help="(live) directory of released-track audio files to analyze")
+    p_grd.add_argument("--device", default="cpu", help="(live) torch device for the workers analyzer")
+    p_grd.add_argument("--real-synth", action="store_true",
+                       help="(live) use the Anthropic synthesizer instead of the deterministic template")
+    p_grd.add_argument("--model", default="claude-opus-4-8", help="(live) Claude model id")
+    p_grd.set_defaults(func=_handle_ground)
 
     p_list = sub.add_parser("list", help="inspect authored skills")
     _add_roots(p_list)

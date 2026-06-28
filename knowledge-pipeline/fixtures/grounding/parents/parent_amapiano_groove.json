@@ -1,0 +1,20 @@
+{
+  "transcript": {
+    "video_id": "amapiano_groove_tut",
+    "caption_source": "manual",
+    "genre": ["amapiano"],
+    "segments": [
+      {"start_s": 12.0, "duration_s": 8.0, "text": "In amapiano the log drum is the groove engine, and overlapping notes in the piano roll give it that signature slide and bounce."},
+      {"start_s": 34.0, "duration_s": 7.0, "text": "Keep a continuous shaker and hi-hat loop running to fill the gaps between the log-drum hits for that rolling momentum."},
+      {"start_s": 58.0, "duration_s": 7.0, "text": "Add subtle swing and ghost notes so the groove breathes instead of sounding stiff and programmed."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "The amapiano log drum is the groove engine; overlapping piano-roll notes create its signature slide.",
+     "technique": "log-drum-groove", "stage": "drums", "genre": ["amapiano"], "confidence": 0.85},
+    {"segment": 1, "claim_text": "Keep a continuous shaker and hi-hat loop running to fill the gaps between log-drum hits for rolling momentum.",
+     "technique": "shaker-loop", "stage": "drums", "genre": ["amapiano"], "confidence": 0.8},
+    {"segment": 2, "claim_text": "Add subtle swing and ghost notes so the groove breathes rather than sounding stiff.",
+     "technique": "groove-swing-feel", "stage": "drums", "genre": ["amapiano"], "confidence": 0.8}
+  ]
+}

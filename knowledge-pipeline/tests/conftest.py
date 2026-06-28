@@ -188,6 +188,51 @@ def make_cell(stage: str = "bassline", genre: str = "deep-house") -> ProductionC
     return ProductionCell(stage=stage, genre=genre)
 
 
+# ============================================================================================
+# Phase-6 helpers (sparse-genre grounding) — all over the fakes (pydantic + stdlib only).
+# ============================================================================================
+
+
+def mine_grounding_parent_layer():
+    """Mine the Phase-6 parent fixtures (+ reused bundled claims) into ``(claim_store, corpus)``.
+
+    Reuses the Phase-4 mining flow over the fakes so the grounding pipeline's parent input is the REAL
+    cross-referenced consensus/conflict layer (incl. the reused amapiano log-drum conflict).
+    """
+    from knowledge_pipeline.grounding_fixtures import load_grounding_fixtures
+
+    fx = load_grounding_fixtures()
+    corpus = InMemoryCorpusStore()
+    clock = FakeClock()
+    for vid, transcript in fx.parents.transcripts.items():
+        corpus.write_snapshot(transcript, snapshot_record(transcript, clock.now()))
+    claim_store = InMemoryClaimStore()
+    MiningPipeline(
+        FakeClaimExtractor(scripted=fx.parents.scripted), claim_store, corpus,
+        similarity=KeywordSimilarityIndex(),
+    ).mine([MineTarget(video_id=v, genres=fx.parents.genres.get(v, [])) for v in fx.parents.video_ids])
+    return claim_store, corpus, fx
+
+
+@pytest.fixture
+def grounding_plane():
+    """A GroundingPipeline wired over fakes: parent claim layer + canned audio analyzer + in-mem skill store.
+
+    Returns ``(pipeline, skill_store, claim_store, fx)`` — drives decompose -> parents -> analyze ->
+    synthesize -> GATE -> grounded emit with no API, no torch/CLAP, no audio bytes.
+    """
+    from knowledge_pipeline.adapters import FakeTrackAnalyzer
+    from knowledge_pipeline.grounding_pipeline import GroundingPipeline
+
+    claim_store, corpus, fx = mine_grounding_parent_layer()
+    skill_store = InMemorySkillStore()
+    pipeline = GroundingPipeline(
+        FakeSkillSynthesizer(), skill_store, claim_store, FakeTrackAnalyzer(fx.records), fx.tracks,
+        corpus=corpus, now=lambda: FIXED_NOW,
+    )
+    return pipeline, skill_store, claim_store, fx
+
+
 def make_citation(claim, *, stance: str | None = None) -> SkillCitation:
     """A SkillCitation that mirrors a real Claim (so the gate's quote-match + number checks pass)."""
     return SkillCitation(

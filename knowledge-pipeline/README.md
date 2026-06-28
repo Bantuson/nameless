@@ -18,6 +18,14 @@ The build-time authoring tool that grounds Nameless's craft (PRD M0 foundation, 
   that REJECTS any draft with an invented number, an uncited assertion, or an untraceable citation. Skills
   emit as `status: draft` and ship only after a **human spot-audit** (`skills audit` → `skills promote`).
   This is the SYNTHESIZE half — where "quality in, quality out" becomes a check, not a hope.
+- **Phase 6 — sparse-genre grounding** (`skills ground` CLI): author a skill for an **under-tutorialized**
+  cell (**alternative piano** — Ben Produces, Liyana Ricky, Lowbass Djy) WITHOUT fabricating craft, by
+  (1) **decomposing** the target into parent techniques (amapiano log-drum groove + jazzy piano + deep-house
+  space) and composing from their already-authored claims, and (2) **analyzing the artists' real released
+  tracks** through the Phase-2 feature/CLAP pipeline to fold in measured (non-melodic) signatures — each a
+  distinct, cited evidence type. It runs through the SAME hard citation gate and is stamped **LOW confidence
+  by construction** with an explicit "grounded by decomposition + audio analysis, NOT direct tutorials" note.
+  Thin, indirect evidence is never dressed as settled craft.
 
 This is a **sibling of `workers/`, NOT a runtime plane.** It runs on your machine when you want to
 (re)build the corpus/claims, writes files + a local `registry.sqlite`, and then disappears from the
@@ -29,7 +37,8 @@ two knowledge layers are deliberately separate.
   synthesis), **KNOW-06** (cross-reference consensus + conflict preserved as first-class data); **KNOW-07**
   (layered synthesis over the claim set), **KNOW-08** (the hard citation gate — no invented numbers),
   **KNOW-09** (authored skills, P1 north-star cells first, `skills/production/`), **KNOW-11** (human
-  spot-audit + gated promotion).
+  spot-audit + gated promotion); **KNOW-10** (Phase 6 — sparse-genre grounding by parent-technique
+  decomposition + released-track audio analysis, stamped honest LOW confidence).
 - The ideas (captions, IP-blocking, extractability, snapshots, faster-whisper **and** structured tool-use
   extraction, the extract-then-synthesize split, citation discipline, consensus/conflict, semantic-dedup
   trade-offs) are taught in depth in **[`LEARNING.md`](./LEARNING.md)**.
@@ -114,7 +123,7 @@ run from a home IP). The code is complete and real; the network/ASR paths are **
 ```bash
 cd knowledge-pipeline
 uv sync --extra dev          # installs only pydantic + pytest
-uv run pytest -q             # 201 tests (P3 + P4 + P5), all on the base env:
+uv run pytest -q             # 239 tests (P3 + P4 + P5 + P6), all on the base env:
                              # P3 — query grid, extractability gate, fallback ladder, snapshot hash/date,
                              #      dedup, throttle-on-fake-clock, corpus store (mem + real sqlite), e2e, CLI
                              # P4 — claim schema + keys, citation verify (positive/drift/not-found),
@@ -126,6 +135,11 @@ uv run pytest -q             # 201 tests (P3 + P4 + P5), all on the base env:
                              #      (mem + real fs), audit coverage + reproducible sample, promote (draft→
                              #      promoted), synthesis e2e (incl. a poisoned synthesizer → all rejected),
                              #      skills CLI, the no-synthesis boundary (anthropic never imported)
+                             # P6 — decomposition map (+ negative space), audio-derived claims (measured,
+                             #      cited to a record; no melody/intent), features→record DTO mapping,
+                             #      LOW-by-construction confidence, grounded emitter, GroundingPipeline e2e
+                             #      (mixed tutorial+audio gate PASS, the reused log-drum conflict preserved,
+                             #      a poisoned audio number → REJECT), fixtures + fake analyzer
 ```
 
 (If not using uv: `pip install pydantic pytest` then `PYTHONPATH=src pytest -q`.)

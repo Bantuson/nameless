@@ -1,0 +1,20 @@
+{
+  "transcript": {
+    "video_id": "jazzy_piano_tut",
+    "caption_source": "manual",
+    "genre": ["rnb"],
+    "segments": [
+      {"start_s": 8.0, "duration_s": 7.0, "text": "For that soulful sound use extended voicings, sevenths and ninths, rather than plain triads."},
+      {"start_s": 26.0, "duration_s": 6.0, "text": "Leave space in the voicings, do not play dense blocks, so every element can breathe."},
+      {"start_s": 44.0, "duration_s": 6.0, "text": "A warm Rhodes or felt piano sets the mood for the whole record."}
+    ]
+  },
+  "claims": [
+    {"segment": 0, "claim_text": "Use extended voicings (sevenths and ninths) rather than plain triads for a soulful sound.",
+     "technique": "extended-voicings", "stage": "chords", "genre": ["rnb"], "confidence": 0.8},
+    {"segment": 1, "claim_text": "Leave space in the voicings instead of dense blocks so every element can breathe.",
+     "technique": "voicing-space", "stage": "chords", "genre": ["rnb"], "confidence": 0.8},
+    {"segment": 2, "claim_text": "A warm Rhodes or felt piano sets the mood of the record.",
+     "technique": "keys-timbre", "stage": "chords", "genre": ["rnb"], "confidence": 0.75}
+  ]
+}

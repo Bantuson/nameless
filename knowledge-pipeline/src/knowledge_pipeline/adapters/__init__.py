@@ -34,6 +34,11 @@ Phase-5 stdlib-only adapters (imported EAGERLY — pydantic + stdlib only):
       - :class:`~knowledge_pipeline.adapters.skill_store_fs.FilesystemSkillStore`  (REAL — sqlite is stdlib)
     REAL LLM adapter (NOT imported here — anthropic LAZY inside __init__):
       - ``skill_synthesizer_anthropic.AnthropicSkillSynthesizer``
+
+Phase-6 stdlib-only adapter (imported EAGERLY — pydantic + stdlib only):
+      - :class:`~knowledge_pipeline.adapters.track_analyzer_fake.FakeTrackAnalyzer`
+    REAL audio adapter (NOT imported here — ``nameless_workers`` + torch/librosa/CLAP LAZY inside methods):
+      - ``track_analyzer_worker.WorkerTrackAnalyzer``  (reuses the Phase-2 workers feature/CLAP plane)
 """
 
 from .claim_extractor_fake import FakeClaimExtractor
@@ -50,6 +55,7 @@ from .similarity_keyword import KeywordSimilarityIndex
 from .skill_store_fs import FilesystemSkillStore
 from .skill_store_mem import InMemorySkillStore
 from .skill_synthesizer_fake import FakeSkillSynthesizer
+from .track_analyzer_fake import FakeTrackAnalyzer
 from .transcribe_fake import FixedTextTranscriber
 
 __all__ = [
@@ -72,4 +78,6 @@ __all__ = [
     "FakeSkillSynthesizer",
     "InMemorySkillStore",
     "FilesystemSkillStore",
+    # Phase 6 — sparse-genre grounding
+    "FakeTrackAnalyzer",
 ]

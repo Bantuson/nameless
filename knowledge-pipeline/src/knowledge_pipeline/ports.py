@@ -35,6 +35,7 @@ from .domain.models import (
     VideoRef,
     Verdict,
 )
+from .domain.grounding import AudioAnalysisRecord, TrackRef
 from .domain.skills import AuthoredSkill, ProductionCell, SkillDraft, SkillStats, SkillStatus
 
 
@@ -282,6 +283,33 @@ class SkillStore(Protocol):
     def stats(self) -> SkillStats: ...
 
 
+# ============================================================================================
+# Phase-6 port — released-track audio analysis for sparse-genre grounding (KNOW-10). Same discipline:
+# the REAL adapter REUSES the Phase-2 ``workers/`` FeatureExtractor + Embedder (heavy import LAZY,
+# env-gated); its FAKE returns canned records. GroundingPipeline depends only on this protocol.
+# ============================================================================================
+
+
+@runtime_checkable
+class TrackAnalyzer(Protocol):
+    """Analyze one released track into a measured, citable :class:`AudioAnalysisRecord` (KNOW-10).
+
+    The real adapter (:class:`~knowledge_pipeline.adapters.track_analyzer_worker.WorkerTrackAnalyzer`) loads
+    the track's audio bytes and runs the Phase-2 ``workers`` ``FeatureExtractor`` (librosa/torchcrepe/
+    pyloudnorm) + ``Embedder`` (LAION-CLAP) — the SAME audio pipeline the fragment graph uses — then maps
+    their output through the pure :func:`~knowledge_pipeline.pure.audio_claims.features_to_record`. Those
+    imports are LAZY + env-gated (torch/CLAP + real audio). The fake
+    (:class:`~knowledge_pipeline.adapters.track_analyzer_fake.FakeTrackAnalyzer`) returns deterministic
+    canned records, so the whole grounding flow runs in tests with no ML and no audio.
+
+    INVARIANT (PITFALLS #5/#6): the record carries only MEASURED non-melodic surface (tempo/swing/key
+    centre/tonal balance/stereo width/loudness/coarse CLAP). It must never expose melody/chords/structure —
+    that is the cloning boundary, enforced at the record's type.
+    """
+
+    def analyze(self, track: TrackRef) -> AudioAnalysisRecord: ...
+
+
 # Convenience: the ports each plane needs, documented in one place.
 __all__ = [
     # Phase 3 — ingestion
@@ -298,4 +326,6 @@ __all__ = [
     # Phase 5 — skill synthesis
     "SkillSynthesizer",
     "SkillStore",
+    # Phase 6 — sparse-genre grounding
+    "TrackAnalyzer",
 ]

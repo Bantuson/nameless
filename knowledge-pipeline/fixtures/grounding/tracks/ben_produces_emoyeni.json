@@ -1,0 +1,23 @@
+{
+  "track_id": "ben_produces_emoyeni",
+  "artist": "Ben Produces",
+  "title": "Emoyeni (alt-piano)",
+  "genre": "alt-piano",
+  "source_track_id": null,
+  "region_ms": [0, 30000],
+  "tempo_bpm": 110.0,
+  "swing_ratio": 0.16,
+  "key_name": "F:min",
+  "key_confidence": 0.62,
+  "tonal_balance": {"low": 0.34, "mid": 0.41, "high": 0.25},
+  "stereo_width": 0.18,
+  "loudness_lufs": -9.5,
+  "clap_tags": [
+    {"tag": "amapiano", "score": 0.41},
+    {"tag": "deep house", "score": 0.33},
+    {"tag": "soulful piano", "score": 0.30}
+  ],
+  "analyzer_version": "fake-grounding-fixture-0",
+  "embed_model": "fake-clap-0",
+  "separator_model": null
+}

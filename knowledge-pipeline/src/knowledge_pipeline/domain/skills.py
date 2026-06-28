@@ -220,6 +220,7 @@ class AuthoredSkill(BaseModel):
     status: SkillStatus = SkillStatus.DRAFT
     relpath: str
     prompt_version: str = ""
+    grounded: bool = False                 # KNOW-10: authored by decomposition + audio, not direct tutorials
     claim_ids: list[str] = Field(default_factory=list)
     citation_count: int = 0
     distinct_sources: int = 0
@@ -243,7 +244,13 @@ class AuthoredSkill(BaseModel):
         A single-source default is LOW (one creator's habit, not consensus); ≥3 is HIGH. The arranger
         weights the skill accordingly — exactly the "confidence tier + the citations behind it" the
         project promised instead of a bare score.
+
+        A ``grounded`` skill (KNOW-10: composed by parent-technique decomposition + audio analysis, with no
+        direct tutorials) is **LOW by construction** regardless of how many tracks corroborate its default —
+        indirect, thin evidence is never presented as settled craft (PITFALLS #4).
         """
+        if self.grounded:
+            return "LOW"
         return confidence_tier(self.default_source_count, contested=self.default_contested)
 
 

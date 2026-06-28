@@ -23,7 +23,7 @@ from typing import Callable, Optional
 from ..domain.skills import AuthoredSkill, SkillStats, SkillStatus
 from ..pure.layered_emitter import set_frontmatter_status
 from ..registry_sql import CONNECT_PRAGMAS
-from ..skills_sql import SKILLS_DDL, SKILLS_SCHEMA_VERSION
+from ..skills_sql import SKILLS_DDL, SKILLS_SCHEMA_VERSION, ensure_skill_columns
 
 
 class FilesystemSkillStore:
@@ -60,6 +60,7 @@ class FilesystemSkillStore:
     def init_schema(self) -> None:
         conn = self._connection()
         conn.executescript(SKILLS_DDL)
+        ensure_skill_columns(conn)  # additive migration for a pre-v2 registry (adds skills.grounded)
         conn.execute(
             "INSERT INTO skill_schema_meta(key, value) VALUES('skill_schema_version', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -84,14 +85,15 @@ class FilesystemSkillStore:
             conn.execute(
                 """
                 INSERT INTO skills
-                    (id, name, description, stage, genre, status, relpath, prompt_version,
+                    (id, name, description, stage, genre, status, relpath, prompt_version, grounded,
                      citation_count, distinct_sources, default_source_count, default_contested,
                      consensus_topics, conflict_topics, body_sha256, authored_at, promoted_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     name=excluded.name, description=excluded.description, stage=excluded.stage,
                     genre=excluded.genre, status=excluded.status, relpath=excluded.relpath,
-                    prompt_version=excluded.prompt_version, citation_count=excluded.citation_count,
+                    prompt_version=excluded.prompt_version, grounded=excluded.grounded,
+                    citation_count=excluded.citation_count,
                     distinct_sources=excluded.distinct_sources, default_source_count=excluded.default_source_count,
                     default_contested=excluded.default_contested, consensus_topics=excluded.consensus_topics,
                     conflict_topics=excluded.conflict_topics, body_sha256=excluded.body_sha256,
@@ -99,7 +101,8 @@ class FilesystemSkillStore:
                 """,
                 (
                     skill.id, skill.name, skill.description, skill.stage, skill.genre, skill.status.value,
-                    skill.relpath, skill.prompt_version, skill.citation_count, skill.distinct_sources,
+                    skill.relpath, skill.prompt_version, 1 if skill.grounded else 0,
+                    skill.citation_count, skill.distinct_sources,
                     skill.default_source_count, 1 if skill.default_contested else 0, skill.consensus_topics,
                     skill.conflict_topics, body_sha, skill.authored_at.isoformat(),
                     skill.promoted_at.isoformat() if skill.promoted_at else None,
@@ -211,6 +214,7 @@ class FilesystemSkillStore:
             status=SkillStatus(row["status"]),
             relpath=row["relpath"],
             prompt_version=row["prompt_version"],
+            grounded=bool(row["grounded"]),
             claim_ids=self._claim_ids(row["id"]),
             citation_count=row["citation_count"],
             distinct_sources=row["distinct_sources"],
