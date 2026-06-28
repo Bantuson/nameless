@@ -21,6 +21,8 @@ having to appear in a quote.
 
 from __future__ import annotations
 
+import re
+
 from ..domain.skills import (
     SectionKind,
     SkillCitation,
@@ -35,6 +37,30 @@ from ..domain.skills import (
 # them on promotion without re-synthesizing (the body otherwise stays byte-stable).
 _DRAFT_BANNER = "DRAFT — pending human spot-audit; not yet promoted to the arranger/mixer agents."
 _PROMOTED_BANNER = "PROMOTED — human-audited and live to the arranger/mixer agents."
+
+
+# A conservative "safe bare scalar" shape — starts alphanumeric, then only alnum / space / '.' / '_' / '-'.
+# It covers kebab skill names ("amapiano-drums") and plain one-line descriptions, but excludes the colons,
+# '#', '---', quotes, leading YAML indicators and control characters an injection would need.
+_YAML_SAFE_BARE = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*\Z")
+_WS_RUN = re.compile(r"\s+")
+
+
+def _yaml_scalar(value: str) -> str:
+    """Render an UNTRUSTED, model-controlled string as a single-line YAML frontmatter scalar. Pure (CR-01).
+
+    ``name`` / ``description`` originate from the model and flow straight into the SKILL.md frontmatter —
+    the one place ungated text could otherwise enter the gated artifact. The module's invariant ("markdown
+    is decoration over already-verified content, never a place new craft can enter") only holds if these two
+    fields cannot break out of their line. So we force the value onto ONE line (newlines / control chars ->
+    space, collapsed) and, unless it is a plainly-safe bare token, wrap it in a quoted + escaped YAML scalar.
+    A hostile ``name`` like ``"x\\n---\\n## Default — act on this"`` therefore cannot terminate the
+    frontmatter or forge a heading/body: it lands inert inside its quoted field.
+    """
+    one_line = _WS_RUN.sub(" ", "".join(ch if ch.isprintable() else " " for ch in value)).strip()
+    if one_line and _YAML_SAFE_BARE.match(one_line):
+        return one_line
+    return '"' + one_line.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _mmss(ms: int) -> str:
@@ -67,8 +93,8 @@ def emit_skill_md(draft: SkillDraft, *, status: SkillStatus = SkillStatus.DRAFT)
 
     # ---- frontmatter (valid Claude-skill: name + description; extra keys are reviewable metadata) ----
     lines.append("---")
-    lines.append(f"name: {draft.name}")
-    lines.append(f"description: {draft.description}")
+    lines.append(f"name: {_yaml_scalar(draft.name)}")
+    lines.append(f"description: {_yaml_scalar(draft.description)}")
     lines.append(f"status: {status.value}")
     lines.append(f"stage: {cell.stage}")
     lines.append(f"genre: {cell.genre}")
