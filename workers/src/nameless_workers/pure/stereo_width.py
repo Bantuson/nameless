@@ -8,10 +8,12 @@ which notes play, only how wide the image is — so it is a safe conditioning/mi
 LEARNING — the mid/side (M/S) transform:
     mid  = (L + R) / 2      # what a mono fold-down hears
     side = (L - R) / 2      # everything that differs between the channels
-A fully mono signal has ``L == R`` so ``side == 0`` → width 0. A hard-panned/decorrelated signal has
-large side energy → width →1. We report width as ``side_energy / (mid_energy + side_energy)`` ∈ [0,1]
-(scale-invariant). L/R correlation is the Pearson correlation of the two channels: +1 = identical
-(mono), 0 = independent, −1 = anti-phase — a second, complementary view of width.
+A fully mono signal has ``L == R`` so ``side == 0`` → width 0. A fully decorrelated equal-power L/R
+pair has equal mid and side energy → width **~0.5** (NOT 1.0); the metric only reaches 1.0 for a true
+anti-phase signal (``R = -L``), where all energy is in the side. We report width as
+``side_energy / (mid_energy + side_energy)`` ∈ [0,1] (scale-invariant): 0 = mono, ~0.5 = fully
+decorrelated, →1 = anti-phase. L/R correlation is the Pearson correlation of the two channels:
++1 = identical (mono), 0 = independent, −1 = anti-phase — a second, complementary view of width.
 """
 
 from __future__ import annotations
@@ -38,8 +40,8 @@ def _energy(x: np.ndarray) -> float:
 def stereo_width_ratio(left: Sequence[float], right: Sequence[float]) -> float:
     """Stereo width in [0, 1] = ``side_energy / (mid_energy + side_energy)``.
 
-    Mono (``L == R``) → 0. Silence (both channels zero) → 0 (no image to measure). Increasing
-    decorrelation / panning → →1.
+    Mono (``L == R``) → 0. Silence (both channels zero) → 0 (no image to measure). Fully
+    decorrelated equal-power L/R → ~0.5; only true anti-phase (``R = -L``) reaches 1.0.
     """
     mid, side = mid_side(left, right)
     me, se = _energy(mid), _energy(side)

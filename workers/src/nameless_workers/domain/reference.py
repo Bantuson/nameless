@@ -85,7 +85,7 @@ class NonMelodicFeatures(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     tonal_balance: TonalBalance
-    stereo_width: float = Field(ge=0.0, le=1.0)  # mid/side energy ratio; 0 = mono, →1 = wide
+    stereo_width: float = Field(ge=0.0, le=1.0)  # mid/side ratio; 0=mono, ~0.5=decorrelated, →1=anti-phase
     lufs: float  # integrated loudness (ITU-R BS.1770-4); a mastering target
     tempo_bpm_min: float = Field(ge=0.0)  # tempo as a RANGE (target band), not a beat grid
     tempo_bpm_max: float = Field(ge=0.0)

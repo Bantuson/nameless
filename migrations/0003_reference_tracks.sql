@@ -104,7 +104,10 @@ create table project_reference_context (
     project_id          uuid not null references projects (id) on delete cascade,
     reference_track_id  uuid not null references reference_tracks (id) on delete cascade,
     role                reference_role not null,
-    attached_at_ms      bigint not null default 0,
+    -- Default to wall-clock epoch-ms so the attach time is actually recorded: the Rust `attach`
+    -- insert omits this column (ProjectReference carries no timestamp), so a literal `0` default
+    -- left every row dead. The DB default now fills a real timestamp without a Rust-side change.
+    attached_at_ms      bigint not null default (extract(epoch from now()) * 1000)::bigint,
     primary key (project_id, reference_track_id)
 );
 

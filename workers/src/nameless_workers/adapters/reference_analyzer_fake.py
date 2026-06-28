@@ -61,7 +61,7 @@ class FakeReferenceAnalyzer:
         raw_bands = rng.uniform(0.05, 1.0, size=5)
         tonal_balance = normalize_to_tonal_balance(raw_bands.tolist())
         stereo_width = round(float(rng.uniform(0.0, 0.8)), 3)
-        lufs = round(float(-14.0 + (seed % 8)), 2)  # [-14, -6] LUFS — a sane master range
+        lufs = round(float(-14.0 + (seed % 8)), 2)  # [-14, -7] LUFS — a sane master range
         tempo_centre = float(80 + (seed % 70))  # [80, 150) BPM
         tempo_bpm_min = round(tempo_centre - 3.0, 1)
         tempo_bpm_max = round(tempo_centre + 3.0, 1)
