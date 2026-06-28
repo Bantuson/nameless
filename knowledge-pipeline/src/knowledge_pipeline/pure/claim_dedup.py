@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Callable, Optional, Sequence
 
 from ..domain.claims import Claim
-from ..domain.keys import normalize_text
+from ..domain.keys import normalize_text, numbers
 
 # A similarity function: two texts -> 0..1. Injected (keyword fake / embedding real); never required.
 SimilarityFn = Callable[[str, str], float]
@@ -56,9 +56,12 @@ def dedup_claims(
 
     # ---- layer 2: same-source (+ optional semantic) near-duplicate collapse ----
     result: list[Claim] = []
-    seen_exact: set[tuple[str, str, str]] = set()
+    seen_exact: set[tuple[str, str, str, str]] = set()
     for c in unique:
-        key = (c.source_video_id, c.topic, normalize_text(c.claim_text))
+        # The key includes stance_key (topic already carries technique): the same point restated at a
+        # different timestamp but with an OPPOSING stance must NOT be dropped as a "repeat" — that would
+        # erase one side of a same-source disagreement.
+        key = (c.source_video_id, c.topic, normalize_text(c.claim_text), c.stance_key)
         if key in seen_exact:
             dropped += 1
             continue
@@ -82,6 +85,11 @@ def _is_semantic_dup(
         if other.source_video_id != candidate.source_video_id:
             continue  # never merge across sources
         if other.topic != candidate.topic:
+            continue
+        # WR-06: never let embedding similarity erase a distinct load-bearing number. An embedding rates
+        # "high-pass at 30 Hz" ≈ "high-pass at 40 Hz" well above threshold, but the differing parameter
+        # is craft — if the numeric token sets differ, these are NOT duplicates whatever the score says.
+        if numbers(other.claim_text) != numbers(candidate.claim_text):
             continue
         if similarity(other.claim_text, candidate.claim_text) >= threshold:
             return True
