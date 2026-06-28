@@ -91,8 +91,11 @@ carry `key: null`/`tempo_bpm: null` until a feature-read path exists (M1+).
 
 ## Security follow-ups (out of scope for this phase)
 
-- **CORS** here is a permissive dev default (`Access-Control-Allow-Origin: *`). A real deployment must
-  pin allowed origins and handle credentials.
+- **CORS** is pinned to a single **configurable dev origin** — `NAMELESS_CORS_ALLOW_ORIGIN`,
+  defaulting to the Vite dev origin `http://localhost:5173` (no longer a wildcard `*`). This is a
+  **local/dev posture**: one fixed origin, no credentialed-origin handling, and **no auth**. A real
+  deployment must add authentication and a proper per-origin allowlist before any non-localhost
+  exposure.
 - **AuthN/AuthZ** is absent — this is a single-user local-first control plane. Adding auth (and the
-  multi-tenant story) is a follow-up.
+  multi-tenant story) is a follow-up and a **release blocker for any non-localhost deployment**.
 - The body limit (64 MiB) bounds per-request memory but there is no global rate limiting yet.

@@ -9,6 +9,9 @@
 //! Env knobs:
 //!   * `NAMELESS_API_ADDR` — bind address (default `127.0.0.1:8080`, matching the web client's
 //!     `VITE_API_BASE_URL` default).
+//!   * `NAMELESS_CORS_ALLOW_ORIGIN` — the single CORS allow-origin (default `http://localhost:5173`,
+//!     the Vite dev origin). A local/dev posture, NOT a wildcard; real auth + a per-origin allowlist
+//!     are a follow-up (see `nameless-api` README "Security follow-ups").
 //!
 //! `[env-gated]` — written to be correct; run later with `cargo run -p nameless-api`.
 

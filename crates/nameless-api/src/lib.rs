@@ -85,19 +85,43 @@ pub fn build_router(state: AppState) -> Router {
         .route("/projects/{id}/credits", get(handlers::get_credits))
         // Raise the body limit so audio uploads fit (applies to the multipart routes).
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
-        // Permissive dev CORS so the Vite dev server (a different origin) can call the API. This is a
-        // DEV default only — see the README "Security follow-ups"; a real deployment must pin origins.
-        .layer(middleware::from_fn(cors_dev))
+        // CORS pinned to a single configurable dev origin so the Vite dev server (a different
+        // origin) can call the API. This is a LOCAL/DEV posture only — see the README "Security
+        // follow-ups"; real auth + a per-origin allowlist is a follow-up, out of M0 scope (WR-02).
+        .layer(middleware::from_fn_with_state(cors_allow_origin(), cors_dev))
         .with_state(state)
 }
 
-/// A minimal, dependency-free permissive CORS layer for local development.
+/// The default CORS allow-origin: the Vite dev server's origin (matching `web/.env.example`).
+pub const DEFAULT_CORS_ALLOW_ORIGIN: &str = "http://localhost:5173";
+
+/// Resolve the single CORS allow-origin for the dev server, read once at router-build time.
 ///
-/// It answers `OPTIONS` preflights with an empty 200 and stamps `Access-Control-Allow-*: *`-style
-/// headers on every response. Intentionally permissive and intentionally NOT production-grade
-/// (no credentialed-origin handling, no per-origin allowlist) — that hardening is a documented
-/// follow-up, out of scope for this phase.
-async fn cors_dev(req: Request, next: Next) -> Response {
+/// Reads `NAMELESS_CORS_ALLOW_ORIGIN` (e.g. your Vite dev origin), defaulting to
+/// [`DEFAULT_CORS_ALLOW_ORIGIN`]. An env value that is not a valid header value falls back to the
+/// default rather than panicking. This deliberately pins ONE concrete origin instead of shipping an
+/// unconfigurable wildcard `*` (WR-02): a wildcard let any site the user visits while the server
+/// runs drive their local control plane. This is still a LOCAL/DEV posture — there is no auth and no
+/// multi-origin allowlist; real authentication is a documented follow-up, out of M0 scope.
+fn cors_allow_origin() -> HeaderValue {
+    let raw = std::env::var("NAMELESS_CORS_ALLOW_ORIGIN")
+        .unwrap_or_else(|_| DEFAULT_CORS_ALLOW_ORIGIN.to_string());
+    HeaderValue::from_str(&raw)
+        .unwrap_or_else(|_| HeaderValue::from_static(DEFAULT_CORS_ALLOW_ORIGIN))
+}
+
+/// A minimal, dependency-free CORS layer for local development.
+///
+/// It answers `OPTIONS` preflights with an empty 200 and stamps `Access-Control-Allow-*` headers on
+/// every response, pinning `Access-Control-Allow-Origin` to the single `allow_origin` configured at
+/// build time (see [`cors_allow_origin`]) rather than `*`. Intentionally simple and intentionally
+/// NOT production-grade (one fixed origin, no credentialed-origin handling, no auth) — that
+/// hardening is a documented follow-up (README "Security follow-ups"), out of scope for this phase.
+async fn cors_dev(
+    axum::extract::State(allow_origin): axum::extract::State<HeaderValue>,
+    req: Request,
+    next: Next,
+) -> Response {
     let is_preflight = req.method() == Method::OPTIONS;
     let mut res = if is_preflight {
         Response::new(Body::empty())
@@ -105,10 +129,9 @@ async fn cors_dev(req: Request, next: Next) -> Response {
         next.run(req).await
     };
     let headers = res.headers_mut();
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        HeaderValue::from_static("*"),
-    );
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, allow_origin);
+    // The allowed origin now varies by configuration, so signal that responses are origin-specific.
+    headers.insert(header::VARY, HeaderValue::from_static("Origin"));
     headers.insert(
         header::ACCESS_CONTROL_ALLOW_METHODS,
         HeaderValue::from_static("GET, POST, OPTIONS"),
