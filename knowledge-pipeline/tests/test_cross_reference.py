@@ -73,6 +73,33 @@ def test_same_source_repeats_do_not_inflate_corroboration():
     assert cl.distinct_consensus_sources == 3
 
 
+def test_divergent_numbers_make_an_unstanced_topic_contested():
+    # WR-03: two same-topic claims that disagree on a load-bearing parameter but carry NO stance must
+    # not collapse into false consensus — the numeric divergence is itself the conflict signal.
+    claims = [
+        make_claim(video="a", technique="sub-bass-highpass", stage="bassline", stance=None,
+                   claim_text="high-pass the sub at 30 hz"),
+        make_claim(video="b", technique="sub-bass-highpass", stage="bassline", stance=None,
+                   claim_text="high-pass the sub at 40 hz"),
+    ]
+    cl = cross_reference(claims)[0]
+    assert cl.is_contested is True
+    assert cl.consensus == [] and len(cl.conflicts) == 2   # both parameters preserved, neither chosen
+
+
+def test_same_numbers_unstanced_stay_consensus():
+    # Agreement on the parameter (both "30 hz"), no stance -> genuine corroboration, not a conflict.
+    claims = [
+        make_claim(video="a", technique="sub-bass-highpass", stage="bassline", stance=None,
+                   claim_text="high-pass the sub at 30 hz"),
+        make_claim(video="b", technique="sub-bass-highpass", stage="bassline", stance=None,
+                   claim_text="roll the sub off at 30 hz"),
+    ]
+    cl = cross_reference(claims)[0]
+    assert cl.is_contested is False
+    assert len(cl.consensus) == 2
+
+
 def test_neutral_claim_does_not_make_a_topic_contested():
     # one advocated stance + one neutral fact on the same technique is agreement, not a conflict.
     claims = [
