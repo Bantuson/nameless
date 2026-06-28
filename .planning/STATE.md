@@ -6,15 +6,15 @@ current_phase: 9
 current_phase_name: Thin Web UI
 status: milestone_complete
 stopped_at: ALL 9 PHASES COMPLETE — M0 milestone delivered (course-project mode). 394 tests pass here (knowledge-pipeline 239 + workers 115 + web 40); Rust written+reviewed (env-gated compile).
-last_updated: "2026-06-27T21:17:05.662Z"
-last_activity: 2026-06-27
-last_activity_desc: Phase 1 implemented — 3-crate Rust control plane (ports/adapters + typed state machine + content-hash storage + job queue + CLI + postgres-feature leaf)
+last_updated: "2026-06-28T00:00:00.000Z"
+last_activity: 2026-06-28
+last_activity_desc: Full per-phase code review ran (all 9 phases) — first independent review of the milestone. 69 findings (4 critical, 32 warning, 33 info); REVIEW.md per phase committed.
 progress:
   total_phases: 9
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 11
+  completed_phases: 9
+  total_plans: 13
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -24,16 +24,30 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Translate the music in your head into genuinely good output — grounded in real production craft (knowledge layer) and your taste (reference tracks + samples). Quality in, quality out.
-**Current focus:** Phase 1 — Typed Capture Spine
+**Current focus:** M0 / v1.0 milestone COMPLETE — outstanding work is independent code review (zero ran for any phase)
 
 ## Current Position
 
-Phase: 2 of 9 (Fragment Analysis) — Phase 1 verified by review ✓
-Plan: starting
-Status: Phase 1 reviewed-complete (course mode); beginning Phase 2 (audio feature/embedding worker)
-Last activity: 2026-06-27 — Phase 1 verified (state machine + ports/adapters reviewed; no stubs)
+Phase: 9 of 9 — ALL phases built & committed (milestone_complete)
+Plan: n/a — milestone delivered (course-project mode)
+Status: M0 functionally complete; 394 Python/web tests pass; Rust + heavy ML/LLM written but un-run (4GB/no-toolchain). FIRST independent code review now DONE (all 9 phases) — 69 findings, fixes pending.
+Last activity: 2026-06-28 — full per-phase code review (4 critical, 32 warning, 33 info)
 
-Progress: [█░░░░░░░░░] 11%
+Progress: [██████████] 100% (build) · review DONE · fixes + true-exec pending
+
+### Code review results (2026-06-28, first independent review — `NN-REVIEW.md` per phase)
+
+Totals: 4 critical · 32 warning · 33 info (69 findings). Status per phase: all `issues`.
+
+**Critical (4):**
+- P2 CR-01 — Python `repo.advance()` mirrors Rust `transition()` not `apply()`/`place()`, so `advance(PLACE)` on a `sampled` fragment bypasses the attribution gate Rust enforces (cross-language legality divergence).
+- P3 CR-01 — path traversal: `video_id` flows unsanitized into snapshot file paths (`corpus_fs.py`), arbitrary file read/write primitive.
+- P5 CR-01 — model-controlled skill `name`/`description` emitted unescaped into SKILL.md → a live model can inject a `---` fence + arbitrary **un-gated** markdown, defeating the citation-gate invariant.
+- P7 CR-01 — `get_context_summary` reads nullable PG columns into non-`Option` fields without `!` overrides → won't compile under `cargo sqlx` (fix: make columns `NOT NULL`). [env-gated]
+
+**Cross-cutting theme (highest-value):** the project's central "structurally impossible to bypass the gate" thesis is actually **convention-enforced** — `Fragment.state`/`provenance` are `pub` mutable fields (P1 WR-01, P8 WR-01); P2 CR-01 is the same hole reaching across the language seam. Recommend hardening the gate into the type system (private fields + `apply()`-only mutation) as the top fix.
+
+**Other notable:** P4 citation kernel both over-rejects (WR-01) and under-rejects (WR-02, the dangerous direction — paraphrased/fabricated quote can pass); P5 sign-blind gate grounds `+6 dB` with `−6 dB` quote; P8 non-atomic sample write (orphan risk) + u32→i32 PG overflow; P9 camelCase↔snake_case serde mismatch will fail against the (not-yet-built) real backend.
 
 ## Performance Metrics
 
@@ -92,8 +106,9 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-27
-Stopped at: Phase 1 (Typed Capture Spine) implemented — all 4 plans + walking skeleton; awaiting verification
-Resume file: None
+Last session: 2026-06-28 (resumed)
+Stopped at: M0/v1.0 all 9 phases built & committed (HEAD 890b446 + handoff ec516e5). Session resumed; presenting status + review options.
+Resume file: .planning/HANDOFF.json + .planning/.continue-here.md (both current; retain until review work begins)
 
-**Phase 1 user actions before verify:** install the Rust toolchain (rustup) and verify the pinned crates on crates.io (README "Supply chain"); then `cargo test` + the `--local` skeleton. The `postgres`-feature build + live Postgres/R2 tests are env-gated (commands in README and 01-SUMMARY.md).
+**Outstanding work (priority order):** (1) independent code review — none ran for any phase; start with the typed integrity boundaries (`state_machine.rs`, `attribution.rs`, `reference.rs`/`conditioning.rs`) + pure `citation_gate.py`; (2) security review of integrity boundaries; (3) true execution on a capable machine (install Rust + Python ML env + Postgres; run each `NN-VERIFICATION.md` env-gated commands); (4) build the deferred axum HTTP API the web UI expects; (5) `/gsd-new-milestone` for M1 (generation + eval gate + mix/master/export).
+**Pending human actions (non-blocking):** background dashboard server `b8rs59wms` (likely dead this session); decide whether to commit or gitignore `.understand-anything/`.
