@@ -42,8 +42,41 @@ class CitationCheck:
     coverage: float = 0.0                        # 0..1 fraction of the quote found in the matched segment
 
 
+def _longest_contiguous_run(quote_tokens: list[str], segment_tokens: list[str]) -> int:
+    """Length of the longest run of CONSECUTIVE quote tokens that also occurs consecutively in the
+    segment (a token-level longest-common-substring). Pure.
+
+    This is what distinguishes a genuine (slightly truncated) caption match from a scattered one: only
+    tokens that appear *in order and adjacent* count toward coverage, so "all the words appear somewhere"
+    no longer earns a high score.
+    """
+    n, m = len(quote_tokens), len(segment_tokens)
+    if n == 0 or m == 0:
+        return 0
+    best = 0
+    prev = [0] * (m + 1)
+    for i in range(1, n + 1):
+        cur = [0] * (m + 1)
+        qi = quote_tokens[i - 1]
+        for j in range(1, m + 1):
+            if qi == segment_tokens[j - 1]:
+                cur[j] = prev[j - 1] + 1
+                if cur[j] > best:
+                    best = cur[j]
+        prev = cur
+    return best
+
+
 def _coverage(quote_norm: str, segment_norm: str) -> float:
-    """1.0 for a contiguous substring hit; else token-subset coverage of the quote. Pure."""
+    """1.0 ONLY for a true contiguous substring hit; else the longest contiguous token run as a
+    fraction of the quote, capped below 1.0. Pure.
+
+    A scattered, non-substring match where every quote token merely appears *somewhere* in the segment
+    (in any order) used to reach 1.0 and pass as an exact hit — letting a paraphrased/fabricated quote
+    near the cited timestamp verify (the dangerous under-rejection). Now high coverage requires the
+    quote's words to appear contiguously, so a scattered fake scores low and is rejected, while a minor
+    caption truncation (a near-contiguous prefix/suffix) still clears ``min_coverage``.
+    """
     if not quote_norm:
         return 0.0
     if quote_norm in segment_norm:
@@ -51,9 +84,10 @@ def _coverage(quote_norm: str, segment_norm: str) -> float:
     q = tokens(quote_norm)
     if not q:
         return 0.0
-    seg = set(tokens(segment_norm))
-    hits = sum(1 for t in q if t in seg)
-    return hits / len(q)
+    seg = tokens(segment_norm)
+    run = _longest_contiguous_run(q, seg)
+    # Cap below 1.0: only the contiguous-substring path above may earn an exact (short-circuit) hit.
+    return min(0.99, run / len(q))
 
 
 def verify_citation(
@@ -85,14 +119,19 @@ def verify_citation(
     best_cov = 0.0
     best_start_ms: Optional[int] = None
     for seg in snapshot.segments:
+        seg_start = int(round(seg.start_s * 1000))
         cov = _coverage(quote_norm, normalize_text(seg.text))
-        if cov > best_cov:
-            best_cov = cov
-            best_start_ms = int(round(seg.start_s * 1000))
-        if best_cov >= 1.0:
-            # keep scanning only to prefer the in-tolerance occurrence of an exact substring
-            if best_start_ms is not None and abs(claim.timestamp_ms - best_start_ms) <= tolerance_ms:
-                break
+        # Pick the highest coverage; AT EQUAL coverage prefer the occurrence CLOSEST to the cited
+        # timestamp. A recurring quote (filler occurrence + the real cited one) must not freeze on the
+        # first match and report false DRIFT against it — the in-tolerance occurrence has to win.
+        better = cov > best_cov or (
+            cov == best_cov
+            and cov > 0.0
+            and best_start_ms is not None
+            and abs(claim.timestamp_ms - seg_start) < abs(claim.timestamp_ms - best_start_ms)
+        )
+        if better:
+            best_cov, best_start_ms = cov, seg_start
 
     if best_start_ms is None or best_cov < min_coverage:
         return CitationCheck(ok=False, reason="not_found", coverage=best_cov)

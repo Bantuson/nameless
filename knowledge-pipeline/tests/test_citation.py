@@ -73,3 +73,51 @@ def test_partial_coverage_within_tolerance_passes():
     claim = make_claim(quote="cut around 300 hz on the log drum", video="vid", ts_ms=5000)
     chk = verify_citation(claim, snap, min_coverage=0.8)
     assert chk.ok is True
+
+
+def test_truncated_caption_still_verifies_via_contiguous_run():
+    # A near-contiguous suffix-truncated quote (missing the trailing word) keeps a high contiguous run
+    # and clears min_coverage — the legitimate token-fallback case the gate must still admit.
+    snap = RawTranscript(
+        video_id="vid", caption_source=CaptionSource.MANUAL,
+        segments=[TranscriptSegment(start_s=5.0, duration_s=5.0,
+                                    text="High pass the sub bass around 30")],
+    )
+    claim = make_claim(quote="high pass the sub bass around 30 hz", video="vid", ts_ms=5000)
+    chk = verify_citation(claim, snap, min_coverage=0.8)
+    assert chk.ok is True
+    assert chk.reason == "verified"
+    assert chk.coverage < 1.0          # not an exact substring, but a high contiguous run
+
+
+def test_scattered_token_fake_is_rejected_not_verified():
+    # WR-02 (the dangerous under-rejection): every quote token APPEARS in the nearby segment, but
+    # scattered / out of order. It is NOT a real quotation and must be rejected, not marked verified.
+    snap = RawTranscript(
+        video_id="vid", caption_source=CaptionSource.MANUAL,
+        segments=[TranscriptSegment(start_s=5.0, duration_s=5.0,
+                                    text="Cut around 300 Hz on the log drum to remove mud.")],
+    )
+    # tokens cut / 300 / mud / drum all present in the segment, but never contiguous.
+    fake = make_claim(quote="cut 300 mud drum", video="vid", ts_ms=5000)
+    chk = verify_citation(fake, snap, min_coverage=0.8)
+    assert chk.ok is False
+    assert chk.reason == "not_found"
+    assert chk.coverage < 0.8
+
+
+def test_recurring_quote_prefers_in_tolerance_occurrence_not_first():
+    # WR-01 (false DRIFT): the SAME phrase appears twice. The claim cites the LATER occurrence; the gate
+    # must anchor there and verify, not freeze on the first occurrence and report drift.
+    snap = RawTranscript(
+        video_id="vid", caption_source=CaptionSource.MANUAL,
+        segments=[
+            TranscriptSegment(start_s=5.0, duration_s=5.0, text="drop the low end"),    # filler occurrence
+            TranscriptSegment(start_s=60.0, duration_s=5.0, text="drop the low end"),   # the cited one
+        ],
+    )
+    claim = make_claim(quote="drop the low end", video="vid", ts_ms=60000)
+    chk = verify_citation(claim, snap)
+    assert chk.ok is True
+    assert chk.reason == "verified"
+    assert chk.matched_start_ms == 60000          # not frozen on the 5000 ms first occurrence
