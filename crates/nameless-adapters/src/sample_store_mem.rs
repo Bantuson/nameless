@@ -96,6 +96,11 @@ impl AttributionStore for InMemorySampleStore {
             .cloned()
             .collect())
     }
+
+    fn delete_attribution(&self, fragment: FragmentId) -> Result<(), RepoError> {
+        self.lock()?.attributions.remove(&fragment);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

@@ -137,6 +137,18 @@ impl AttributionStore for FileSampleStore {
             .filter(|a| a.project_id == project)
             .collect())
     }
+
+    fn delete_attribution(&self, fragment: FragmentId) -> Result<(), RepoError> {
+        let mut db = self.load()?;
+        let before = db.attributions.len();
+        db.attributions.retain(|a| a.fragment_id != fragment);
+        // Only rewrite when something changed (idempotent on a missing row).
+        if db.attributions.len() != before {
+            db.version = DB_VERSION;
+            self.store(&db)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

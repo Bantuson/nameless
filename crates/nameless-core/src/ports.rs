@@ -58,6 +58,14 @@ pub trait FragmentRepo {
 
     /// Fetch a single fragment by id, or `Ok(None)` if it does not exist.
     fn get_fragment(&self, id: FragmentId) -> Result<Option<Fragment>, RepoError>;
+
+    /// Delete a fragment by id. Idempotent: deleting a non-existent id is `Ok(())`.
+    ///
+    /// This exists for *compensating cleanup* on a non-atomic multi-store write (e.g. `sample add`
+    /// inserts a fragment, then an attribution, then enqueues a job — if a later step fails, the
+    /// just-inserted fragment must be removed so the graph cannot hold a `sampled` fragment with no
+    /// attribution row). It is NOT a lifecycle transition and does not touch the state machine.
+    fn delete_fragment(&self, id: FragmentId) -> Result<(), RepoError>;
 }
 
 /// Persistence for reference tracks + their attachments to projects (Phase 7).
@@ -141,6 +149,13 @@ pub trait AttributionStore {
         &self,
         project: ProjectId,
     ) -> Result<Vec<SampleAttribution>, RepoError>;
+
+    /// Delete the attribution for a fragment. Idempotent: deleting a missing row is `Ok(())`.
+    ///
+    /// Exists for *compensating cleanup* when a `sample add` succeeds in inserting the attribution
+    /// but a later step (the analysis-job enqueue) fails: the half-applied attribution is removed so
+    /// the graph cannot keep a credit row for a fragment that is itself being rolled back.
+    fn delete_attribution(&self, fragment: FragmentId) -> Result<(), RepoError>;
 }
 
 /// A combined stem + attribution store — one object that satisfies both Phase-8 ports.

@@ -68,6 +68,14 @@ impl FragmentRepo for InMemoryFragmentRepo {
     fn get_fragment(&self, id: FragmentId) -> Result<Option<Fragment>, RepoError> {
         Ok(self.lock()?.fragments.get(&id).cloned())
     }
+
+    fn delete_fragment(&self, id: FragmentId) -> Result<(), RepoError> {
+        let mut inner = self.lock()?;
+        if inner.fragments.remove(&id).is_some() {
+            inner.order.retain(|fid| *fid != id);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

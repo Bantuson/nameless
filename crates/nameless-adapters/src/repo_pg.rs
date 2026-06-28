@@ -259,6 +259,20 @@ impl FragmentRepo for PostgresFragmentRepo {
             )?)),
         }
     }
+
+    fn delete_fragment(&self, id: FragmentId) -> Result<(), RepoError> {
+        // Idempotent: a `delete ... where id = $1` affecting zero rows is still Ok. Any
+        // `sample_attribution` row referencing this fragment is removed by the FK `on delete
+        // cascade` (migration 0004), so compensating cleanup leaves no dangling attribution.
+        self.rt
+            .block_on(async {
+                sqlx::query!(r#"delete from fragments where id = $1"#, id.0)
+                    .execute(&self.pool)
+                    .await
+            })
+            .map_err(|e| RepoError::Backend(e.to_string()))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

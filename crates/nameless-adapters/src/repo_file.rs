@@ -111,6 +111,18 @@ impl FragmentRepo for FileFragmentRepo {
         let db = self.load()?;
         Ok(db.fragments.into_iter().find(|f| f.id == id))
     }
+
+    fn delete_fragment(&self, id: FragmentId) -> Result<(), RepoError> {
+        let mut db = self.load()?;
+        let before = db.fragments.len();
+        db.fragments.retain(|f| f.id != id);
+        // Only rewrite the file when something actually changed (idempotent on a missing id).
+        if db.fragments.len() != before {
+            db.version = DB_VERSION;
+            self.store(&db)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

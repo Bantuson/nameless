@@ -489,14 +489,32 @@ pub fn do_sample_add(
     );
     plane.repo.insert_fragment(&frag)?;
 
-    // Persist the complete attribution bound to this fragment + project.
+    // The next two writes (attribution, then job enqueue) hit different stores and are NOT in one
+    // transaction (the file/in-memory profiles have no cross-store tx). A failure after the fragment
+    // insert would otherwise orphan a `sampled` fragment with no attribution row (invisible to
+    // `credits`) or with no analysis job. So on ANY failure here we COMPENSATE by deleting the
+    // just-inserted fragment before returning the error — leaving the graph as if nothing happened.
+    // (`delete_fragment` cascades to the attribution row on the Postgres profile, so even a partially
+    // written attribution is cleaned up.)
     let attribution = SampleAttribution::new(frag.id, args.project, complete);
-    plane.samples.insert_attribution(&attribution)?;
+    if let Err(e) = plane.samples.insert_attribution(&attribution) {
+        let _ = plane.repo.delete_fragment(frag.id);
+        return Err(e.into());
+    }
 
     // The sample travels the human analysis path — enqueue feature extraction (like capture).
-    let job = plane.queue.enqueue(JobEnvelope::FeatureExtract {
+    let job = match plane.queue.enqueue(JobEnvelope::FeatureExtract {
         fragment_id: frag.id,
-    })?;
+    }) {
+        Ok(job) => job,
+        Err(e) => {
+            // Roll back BOTH writes: drop the fragment (cascades to the attribution on Postgres;
+            // the file/in-memory attribution row is keyed by fragment_id and is dropped explicitly).
+            let _ = plane.samples.delete_attribution(frag.id);
+            let _ = plane.repo.delete_fragment(frag.id);
+            return Err(e.into());
+        }
+    };
 
     Ok((frag, attribution, job))
 }
@@ -944,6 +962,48 @@ mod tests {
         // Nothing was created: no fragment, no attribution, no job.
         assert!(plane.repo.list_fragments(None).unwrap().is_empty());
         assert!(plane.queue.consume().unwrap().is_none());
+    }
+
+    /// WR-02: a failure AFTER the fragment+attribution writes (here, the analysis-job enqueue)
+    /// compensates by deleting both — the graph is left as if the promotion never happened, so no
+    /// orphaned `sampled` fragment and no dangling credit row survive.
+    #[test]
+    fn sample_add_rolls_back_fragment_and_attribution_when_enqueue_fails() {
+        // A 0-capacity queue rejects every enqueue → deterministically forces the post-write failure.
+        let plane = Plane {
+            store: Box::new(InMemoryObjectStore::new()),
+            repo: Box::new(InMemoryFragmentRepo::new()),
+            queue: Box::new(InMemoryJobQueue::new(0)),
+            references: Box::new(InMemoryReferenceStore::new()),
+            samples: Box::new(InMemorySampleStore::new()),
+        };
+        let track = ReferenceTrack::new_upload(
+            "trackhash".into(),
+            Some("Trust".into()),
+            Some("Brent Faiyaz".into()),
+            None,
+            None,
+        );
+        plane.references.insert_track(&track).unwrap();
+        let stem = seed_stem(&plane, track.id);
+
+        let args = SampleAddArgs {
+            stem: stem.id,
+            project: ProjectId::new(),
+            artist: "Brent Faiyaz".into(),
+            time_range: (12_000, 18_000),
+            rights: RightsArg::CopyrightedUncleared,
+            title: None,
+        };
+        // The enqueue fails → the whole promotion is rolled back.
+        assert!(matches!(do_sample_add(&plane, &args), Err(CliError::Job(_))));
+        // Neither the fragment nor its attribution survives the failure.
+        assert!(plane.repo.list_fragments(None).unwrap().is_empty());
+        assert!(plane
+            .samples
+            .list_project_attributions(args.project)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

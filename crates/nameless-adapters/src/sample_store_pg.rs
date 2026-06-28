@@ -271,6 +271,23 @@ impl AttributionStore for PostgresSampleStore {
             })
             .collect()
     }
+
+    fn delete_attribution(&self, fragment: FragmentId) -> Result<(), RepoError> {
+        // Idempotent: a delete affecting zero rows is still Ok. (On the Postgres profile a
+        // `delete_fragment` would also remove this via the FK cascade; this explicit delete keeps
+        // the compensating cleanup correct on every profile and order-independent.)
+        self.rt
+            .block_on(async {
+                sqlx::query!(
+                    r#"delete from sample_attribution where fragment_id = $1"#,
+                    fragment.0,
+                )
+                .execute(&self.pool)
+                .await
+            })
+            .map_err(|e| RepoError::Backend(e.to_string()))?;
+        Ok(())
+    }
 }
 
 fn parse_stem_type(s: &str) -> Result<StemType, RepoError> {
