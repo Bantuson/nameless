@@ -12,6 +12,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -36,12 +37,35 @@ const DB_VERSION: u32 = 1;
 #[derive(Debug, Clone)]
 pub struct FileFragmentRepo {
     path: PathBuf,
+    /// Serializes the whole `load → mutate → store` critical section of every mutating method.
+    ///
+    /// Until Phase 10 this store only ever ran one-operation-per-process (the `nameless` CLI), so a
+    /// read-modify-write needed no lock. The axum control plane shares ONE `Arc<Plane>` (hence one
+    /// store instance) across multi-threaded worker threads and dispatches writes through
+    /// `spawn_blocking`, so two concurrent `POST`s could otherwise both `load()`, each append a
+    /// different row, and each `store()` — the second atomic rename silently dropping the first
+    /// write (WR-01). Holding this lock across the read+mutate+write makes the cycle a critical
+    /// section. `Arc<Mutex<_>>` so `Clone`d handles to the same store share one lock (the in-memory
+    /// adapters already lock per op — this brings the file ones to parity).
+    write_lock: Arc<Mutex<()>>,
 }
 
 impl FileFragmentRepo {
     /// Open (or lazily create) a repo at `path`. The file is created on first write.
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        FileFragmentRepo { path: path.into() }
+        FileFragmentRepo {
+            path: path.into(),
+            write_lock: Arc::new(Mutex::new(())),
+        }
+    }
+
+    /// Acquire the write-serialization guard, recovering from a poisoned lock.
+    ///
+    /// Poisoning means a previous writer panicked mid-mutation; the on-disk file is still intact
+    /// (the temp-file + atomic rename guarantees that), so recovering the guard and letting the next
+    /// writer proceed is safe and avoids bricking all future writes.
+    fn write_guard(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.write_lock.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Load the document, treating a missing file as an empty db.
@@ -73,6 +97,7 @@ impl FileFragmentRepo {
 
 impl FragmentRepo for FileFragmentRepo {
     fn insert_project(&self, p: &Project) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         db.version = DB_VERSION;
         // Upsert by id (idempotent re-insert).
@@ -98,6 +123,7 @@ impl FragmentRepo for FileFragmentRepo {
     }
 
     fn insert_fragment(&self, f: &Fragment) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         db.version = DB_VERSION;
         if let Some(existing) = db.fragments.iter_mut().find(|x| x.id == f.id) {
@@ -126,6 +152,7 @@ impl FragmentRepo for FileFragmentRepo {
     }
 
     fn delete_fragment(&self, id: FragmentId) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         let before = db.fragments.len();
         db.fragments.retain(|f| f.id != id);

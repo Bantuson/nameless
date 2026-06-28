@@ -11,6 +11,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -38,12 +39,26 @@ const DB_VERSION: u32 = 1;
 #[derive(Debug, Clone)]
 pub struct FileSampleStore {
     path: PathBuf,
+    /// Serializes the `load → mutate → store` critical section of every mutating method (across
+    /// BOTH the `StemStore` and `AttributionStore` impls — they share one file) so the concurrent
+    /// axum control plane cannot interleave two read-modify-writes and silently drop one (WR-01).
+    /// `Arc<Mutex<_>>` so clones share one lock; matches the in-memory adapters' per-op locking.
+    write_lock: Arc<Mutex<()>>,
 }
 
 impl FileSampleStore {
     /// Open (or lazily create) a store at `path`. The file is created on first write.
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        FileSampleStore { path: path.into() }
+        FileSampleStore {
+            path: path.into(),
+            write_lock: Arc::new(Mutex::new(())),
+        }
+    }
+
+    /// Acquire the write-serialization guard, recovering from a poisoned lock (the atomic
+    /// temp-file+rename keeps the on-disk file intact even if a prior writer panicked).
+    fn write_guard(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.write_lock.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn load(&self) -> Result<Db, RepoError> {
@@ -74,6 +89,7 @@ impl FileSampleStore {
 
 impl StemStore for FileSampleStore {
     fn insert_stem(&self, stem: &Stem) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         db.version = DB_VERSION;
         if let Some(existing) = db.stems.iter_mut().find(|s| s.id == stem.id) {
@@ -101,6 +117,7 @@ impl StemStore for FileSampleStore {
 
 impl AttributionStore for FileSampleStore {
     fn insert_attribution(&self, attribution: &SampleAttribution) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         db.version = DB_VERSION;
         if let Some(existing) = db
@@ -139,6 +156,7 @@ impl AttributionStore for FileSampleStore {
     }
 
     fn delete_attribution(&self, fragment: FragmentId) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         let before = db.attributions.len();
         db.attributions.retain(|a| a.fragment_id != fragment);

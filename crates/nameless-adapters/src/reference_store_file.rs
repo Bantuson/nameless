@@ -14,6 +14,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -52,12 +53,27 @@ const DB_VERSION: u32 = 1;
 #[derive(Debug, Clone)]
 pub struct FileReferenceStore {
     path: PathBuf,
+    /// Serializes the `load → mutate → store` critical section of every mutating method so the
+    /// concurrent axum control plane (one `Arc<Plane>` shared across worker threads, writes via
+    /// `spawn_blocking`) cannot interleave two read-modify-writes and silently drop one (WR-01).
+    /// `Arc<Mutex<_>>` so clones share one lock; mirrors the per-op locking the in-memory adapters
+    /// already do.
+    write_lock: Arc<Mutex<()>>,
 }
 
 impl FileReferenceStore {
     /// Open (or lazily create) a store at `path`. The file is created on first write.
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        FileReferenceStore { path: path.into() }
+        FileReferenceStore {
+            path: path.into(),
+            write_lock: Arc::new(Mutex::new(())),
+        }
+    }
+
+    /// Acquire the write-serialization guard, recovering from a poisoned lock (the atomic
+    /// temp-file+rename keeps the on-disk file intact even if a prior writer panicked).
+    fn write_guard(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.write_lock.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn load(&self) -> Result<Db, RepoError> {
@@ -88,6 +104,7 @@ impl FileReferenceStore {
     /// Persist a context's compact summary (the local stand-in for the Python analyzer write).
     /// Stores `ctx.summary()` so the embedding vector never lands on disk in the readable surface.
     pub fn set_context_summary(&self, ctx: &ReferenceContext) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         db.version = DB_VERSION;
         let summary = ctx.summary();
@@ -106,6 +123,7 @@ impl FileReferenceStore {
 
 impl ReferenceStore for FileReferenceStore {
     fn insert_track(&self, track: &ReferenceTrack) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         db.version = DB_VERSION;
         if let Some(existing) = db.tracks.iter_mut().find(|t| t.id == track.id) {
@@ -142,6 +160,7 @@ impl ReferenceStore for FileReferenceStore {
         reference: ReferenceTrackId,
         role: ReferenceRole,
     ) -> Result<(), RepoError> {
+        let _guard = self.write_guard(); // serialize the load→mutate→store cycle (WR-01)
         let mut db = self.load()?;
         db.version = DB_VERSION;
         if let Some(existing) = db
