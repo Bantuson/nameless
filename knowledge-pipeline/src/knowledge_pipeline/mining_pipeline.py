@@ -54,7 +54,7 @@ class MiningConfig:
 
     citation_tolerance_ms: int = 2000      # how far a quote may sit from its cited ts before it's drift
     citation_min_coverage: float = 0.8     # min token coverage to accept a non-substring quote match
-    require_citation: bool = False         # if True, DROP claims whose citation fails (else keep + flag)
+    require_citation: bool = True          # default DROP claims whose citation fails (WR-05); opt out to keep+flag
     semantic_dedup: bool = False           # if True, use the injected SimilarityIndex for same-source dedup
     semantic_threshold: float = 0.9
 

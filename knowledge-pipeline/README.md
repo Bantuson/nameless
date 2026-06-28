@@ -216,7 +216,7 @@ uv sync --extra extract
 export ANTHROPIC_API_KEY=sk-ant-...
 uv run claims mine --corpus-root ./.nameless-knowledge/corpus                 # all keep/low_signal videos
 uv run claims mine --corpus-root ./.nameless-knowledge/corpus --video <VIDEO_ID>   # a single video
-uv run claims mine --corpus-root ./.nameless-knowledge/corpus --require-citation   # drop claims whose citation fails
+uv run claims mine --corpus-root ./.nameless-knowledge/corpus --no-require-citation # keep+flag claims whose citation fails (default DROPS them)
 
 # 3. Inspect (these read the registry — no API, runnable anywhere):
 uv run claims list  --corpus-root ./.nameless-knowledge/corpus --by-stage

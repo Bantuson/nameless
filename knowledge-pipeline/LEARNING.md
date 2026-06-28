@@ -259,7 +259,8 @@ against the immutable Phase-3 snapshot by the pure `verify_citation`:
   cannot be hallucinated.
 
 `verify_citation` is deliberately the **kernel of Phase 5's hard gate**: Phase 4 computes it and *records*
-it (and can drop on failure with `--require-citation`), Phase 5 turns it into a non-negotiable reject.
+it and DROPS a citation-failing claim by default (opt out with `--no-require-citation` to keep+flag),
+Phase 5 turns it into a non-negotiable reject.
 
 ## 10. Consensus vs conflict as first-class data (and why distinct sources, not repeats)
 

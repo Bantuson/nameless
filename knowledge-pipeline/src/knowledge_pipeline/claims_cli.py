@@ -263,7 +263,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_mine.add_argument("--video", nargs="*", default=None, help="(live) specific video ids to mine")
     p_mine.add_argument("--model", default="claude-opus-4-8", help="(live) Claude model id")
-    p_mine.add_argument("--require-citation", action="store_true", help="drop claims whose citation fails")
+    p_mine.add_argument(
+        "--require-citation", action=argparse.BooleanOptionalAction, default=True,
+        help="drop claims whose citation fails (default: on; use --no-require-citation to keep+flag them)",
+    )
     p_mine.add_argument("--semantic-dedup", action="store_true", help="use the similarity index for same-source dedup")
     p_mine.set_defaults(func=_handle_mine)
 

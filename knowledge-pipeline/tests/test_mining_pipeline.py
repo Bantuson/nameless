@@ -63,6 +63,35 @@ def test_each_stored_claim_is_marked_citation_verified(mining_plane):
     assert store.stats().citation_verified == store.stats().total_claims
 
 
+def test_require_citation_is_on_by_default():
+    # WR-05: the safe path must be the default — a claim whose quote is absent from the transcript
+    # (the real LLM's failure mode) is rejected, not persisted with an invented timestamp.
+    assert MiningConfig().require_citation is True
+
+
+def test_default_pipeline_drops_a_hallucinated_claim():
+    # The default MiningPipeline (no explicit config) drops the uncited claim.
+    corpus = InMemoryCorpusStore()
+    transcript = RawTranscript(
+        video_id="v",
+        caption_source=CaptionSource.MANUAL,
+        segments=[TranscriptSegment(start_s=4.0, duration_s=5.0, text="High-pass the pads at 250 hz.")],
+    )
+    corpus.write_snapshot(transcript, snapshot_record(transcript, FakeClock().now()))
+
+    from .conftest import make_claim
+
+    good = make_claim(video="v", ts_ms=4000, technique="high-pass", stage="mixing",
+                      quote="High-pass the pads at 250 hz.", claim_text="High-pass the pads at 250 Hz.")
+    bad = make_claim(video="v", ts_ms=4000, technique="reverb", stage="atmosphere",
+                     quote="add a tasteful purple gradient", claim_text="add a purple gradient")
+    store = InMemoryClaimStore()
+    pipeline = MiningPipeline(FakeClaimExtractor(scripted={"v": [good, bad]}), store, corpus)
+    report = pipeline.mine([MineTarget(video_id="v")])
+    assert report.total_claims == 1                  # default enforces citation
+    assert store.get_claim(bad.id) is None
+
+
 def test_require_citation_drops_a_hallucinated_claim():
     # A scripted claim whose quote is NOT in the transcript -> citation fails -> dropped when required.
     corpus = InMemoryCorpusStore()
