@@ -172,13 +172,29 @@ class GroundingPipeline:
     def _analyze_tracks(
         self,
     ) -> tuple[list[Claim], list[AudioAnalysisRecord], dict[str, RawTranscript]]:
+        """Analyze each track BEST-EFFORT (WR-03/WR-04).
+
+        Policy is explicit: a track that fails to analyze (missing/corrupt file, decode error, worker API
+        error) or that yields no audio-derived claims is logged at WARNING and SKIPPED — never aborting the
+        whole grounding run because one file of many is bad. The caller (:meth:`ground`) then REQUIRES at
+        least one surviving record before authoring, so a roster that fully drops cannot ship a skill that
+        claims audio corroboration it never actually used.
+        """
         audio_claims: list[Claim] = []
         records: list[AudioAnalysisRecord] = []
         snapshots: dict[str, RawTranscript] = {}
         for track in self._tracks:
-            record = self._analyzer.analyze(track)
+            try:
+                record = self._analyzer.analyze(track)
+            except Exception as exc:  # noqa: BLE001 — one bad file must not abort the whole run (WR-04)
+                logger.warning("audio analysis FAILED for track %s; skipping: %s", track.track_id, exc)
+                continue
             adcs: list[AudioDerivedClaim] = audio_derived_claims(record)
             if not adcs:
+                logger.warning(
+                    "track %s produced no audio-derived claims; skipping (no corroboration) (WR-03)",
+                    track.track_id,
+                )
                 continue
             records.append(record)
             audio_claims.extend(adc.to_claim() for adc in adcs)
@@ -204,6 +220,20 @@ class GroundingPipeline:
         decomposition = decompose(target)
         parent_claims = self._parent_claims(decomposition)
         audio_claims, records, audio_snaps = self._analyze_tracks()
+        parent_cell_slugs = [p.cell.slug for p in decomposition.parents]
+
+        # WR-03: the grounded path is decomposition AND measured audio. If every track failed or yielded no
+        # claims (or the roster was empty), there is NO audio corroboration — refuse rather than ship a
+        # skill whose banner/description claim a measured-track leg it never used.
+        if not records:
+            logger.warning(
+                "GROUNDING REJECTED %s: no audio-analysis records (every track failed or yielded no claims)",
+                target.slug,
+            )
+            return GroundingOutcome(
+                target=target.slug, status="rejected", parent_cells=parent_cell_slugs, audio_tracks=0,
+                reasons=["grounded path requires >=1 successfully analyzed track; none survived"],
+            )
 
         all_claims = parent_claims + audio_claims
         if not all_claims:
@@ -223,7 +253,6 @@ class GroundingPipeline:
         result: GateResult = citation_gate(
             draft, claim_index, snapshots=snapshots, min_coverage=cfg.gate_min_coverage
         )
-        parent_cell_slugs = [p.cell.slug for p in decomposition.parents]
         direct = _direct_tutorial_sources(parent_claims, target)
 
         if not result.ok:

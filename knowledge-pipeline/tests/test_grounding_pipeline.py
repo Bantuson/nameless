@@ -143,6 +143,50 @@ def test_analyzer_was_called_for_every_track(grounding_plane):
     assert set(analyzer.calls) == {t.track_id for t in fx.tracks}
 
 
+def test_one_bad_track_is_skipped_not_fatal(grounding_plane):
+    # WR-04: a single failing analyze() must not abort the run — it is logged and skipped, and the skill is
+    # still authored from the surviving tracks.
+    pipeline, store, _claims, fx = grounding_plane
+
+    good = pipeline._analyzer  # the canned FakeTrackAnalyzer over fx.records
+
+    class OneBadTrack:
+        def __init__(self):
+            self.calls: list[str] = []
+
+        def analyze(self, track):
+            self.calls.append(track.track_id)
+            if track.track_id == fx.tracks[0].track_id:
+                raise OSError("simulated missing/corrupt audio file")
+            return good.analyze(track)
+
+    pipeline._analyzer = OneBadTrack()
+    outcome = pipeline.ground()
+    assert outcome.status == "authored"
+    # the bad track is dropped; the remaining tracks still corroborate
+    assert outcome.audio_tracks == len(fx.tracks) - 1
+    assert store.get_skill(outcome.skill_id) is not None
+
+
+def test_all_tracks_failing_rejects_cleanly_not_crashes(grounding_plane):
+    # WR-03/WR-04: if every track fails (or yields no claims), the grounded path is REJECTED with a clear
+    # reason — it never ships a skill claiming audio corroboration it did not use, and never hard-crashes.
+    pipeline, store, _claims, _fx = grounding_plane
+
+    class AllBad:
+        calls: list[str] = []
+
+        def analyze(self, track):
+            raise OSError("every file is bad")
+
+    pipeline._analyzer = AllBad()
+    outcome = pipeline.ground()
+    assert outcome.status == "rejected"
+    assert outcome.audio_tracks == 0
+    assert any("requires >=1 successfully analyzed track" in r for r in outcome.reasons)
+    assert store.stats().total_skills == 0
+
+
 def test_no_decomposition_target_is_a_hard_failure(grounding_plane):
     import pytest
 
