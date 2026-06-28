@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Cited Claim Mining + Cross-Reference** - Extract atomic, individually-cited claims and preserve consensus/conflict as first-class data ✓ (134 tests pass; course-mode)
 - [x] **Phase 5: Synthesize + Verify the First Authored Skills** - Synthesize only over the claim set into layered, citation-verified SKILL.md for the P1 cells ✓ (201 tests; real skills emitted; course-mode)
 - [x] **Phase 6: Sparse-Genre Grounding** - Author a confidence-labeled alt-piano skill from parent-technique decomposition + real released-track audio ✓ (239 tests; grounded skill emitted; course-mode)
-- [ ] **Phase 7: Reference-Track Context** - Upload a finished song; get its vibe + non-melodic sonic targets, with cloning structurally impossible
+- [x] **Phase 7: Reference-Track Context** - Upload a finished song; get its vibe + non-melodic sonic targets, with cloning structurally impossible ✓ (102 py tests; Rust reviewed; course-mode)
 - [ ] **Phase 8: Stem Library + Attributed Sampling** - Separate tracks into a retained stem library; promote a stem to an attributed sample with a credits sheet
 - [ ] **Phase 9: Thin Web UI** - Do the core M0 loop — capture, reference upload, stem sampling, project review — in the browser
 
@@ -180,6 +180,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Cited Claim Mining + Cross-Reference | 1/1 | ✓ Complete (134 tests) | 2026-06-28 |
 | 5. Synthesize + Verify the First Authored Skills | 1/1 | ✓ Complete (201 tests) | 2026-06-28 |
 | 6. Sparse-Genre Grounding | 1/1 | ✓ Complete (239 tests) | 2026-06-28 |
-| 7. Reference-Track Context | 0/TBD | Not started | - |
+| 7. Reference-Track Context | 1/1 | ✓ Complete (102 py tests) | 2026-06-28 |
 | 8. Stem Library + Attributed Sampling | 0/TBD | Not started | - |
 | 9. Thin Web UI | 0/TBD | Not started | - |

@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 7
-current_phase_name: Reference-Track Context
+current_phase: 8
+current_phase_name: Stem Library + Attributed Sampling
 status: executing
-stopped_at: Phase 6 verified (239 tests; grounded alt-piano skill) — knowledge pipeline (3-6) DONE — starting Phase 7 (Reference-Track Context)
+stopped_at: Phase 7 verified (102 py tests; structural non-cloning) — starting Phase 8 (Stem Library + Attributed Sampling)
 last_updated: "2026-06-27T21:17:05.662Z"
 last_activity: 2026-06-27
 last_activity_desc: Phase 1 implemented — 3-crate Rust control plane (ports/adapters + typed state machine + content-hash storage + job queue + CLI + postgres-feature leaf)
