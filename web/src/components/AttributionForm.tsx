@@ -8,7 +8,7 @@
  * the gate visible before the round-trip. It always surfaces that **attribution is not permission**.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { RightsStatus, StemSummary } from '../api/types';
 import { RIGHTS_STATUSES } from '../api/types';
 import { missingAttributionFields } from '../lib/attribution';
@@ -53,6 +53,13 @@ export function AttributionForm({
   const [endMs, setEndMs] = useState('');
   const [rights, setRights] = useState<RightsStatus | ''>('');
 
+  // A11y (IN-03): when this form is revealed (it mounts on stem selection) move focus to it, so the
+  // change of context is announced rather than leaving focus stranded on the stem table above.
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    formRef.current?.focus();
+  }, []);
+
   const startNum = startMs === '' ? null : Number(startMs);
   const endNum = endMs === '' ? null : Number(endMs);
   const effectiveTitle = (title.trim() || fallbackTitle || '').trim();
@@ -82,7 +89,13 @@ export function AttributionForm({
   }
 
   return (
-    <form className="attr-form" onSubmit={handleSubmit} aria-label={`Attribute the ${stemTypeLabel(stem.stem_type)} stem`}>
+    <form
+      ref={formRef}
+      tabIndex={-1}
+      className="attr-form"
+      onSubmit={handleSubmit}
+      aria-label={`Attribute the ${stemTypeLabel(stem.stem_type)} stem`}
+    >
       <p className="attr-form__lead">
         Promoting the <strong>{stemTypeLabel(stem.stem_type)}</strong> stem to an attributed sample.
         Every field below is required — an incompletely-credited sample cannot be created.

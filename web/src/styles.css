@@ -149,8 +149,10 @@ a {
   box-shadow: 0 0 14px var(--accent-soft);
 }
 .app__brand-name {
+  margin: 0;
   font-weight: 600;
   font-size: 1.05rem;
+  line-height: 1;
   letter-spacing: 0.02em;
 }
 .app__brand-tag {

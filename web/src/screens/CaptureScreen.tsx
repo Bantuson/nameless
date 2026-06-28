@@ -5,12 +5,12 @@
  * No client calls, no fetch — the hook is the seam.
  */
 
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { FRAGMENT_KINDS, type FragmentKind } from '../api/types';
 import { useActiveProject } from '../ActiveProjectContext';
 import { FragmentList } from '../components/FragmentList';
 import { Button, ErrorMessage, Field, Loading } from '../components/ui';
-import { kindLabel } from '../lib/format';
+import { kindLabel, shortId } from '../lib/format';
 import { useFragments } from '../hooks/useFragments';
 import { NoProjectNotice } from './common';
 
@@ -25,6 +25,7 @@ export function CaptureScreen(): JSX.Element {
   const [submitError, setSubmitError] = useState<Error | null>(null);
   const [lastCaptured, setLastCaptured] = useState<string | null>(null);
   const [formKey, setFormKey] = useState(0);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   if (!activeProjectId) return <NoProjectNotice action="capture into" />;
 
@@ -42,6 +43,9 @@ export function CaptureScreen(): JSX.Element {
       setNote('');
       setFile(null);
       setFormKey((k) => k + 1);
+      // A11y (IN-03): remounting the file input (formKey) drops focus to <body>. Return focus to the
+      // note field — the natural next control for capturing another fragment.
+      noteRef.current?.focus();
     } catch (err) {
       setSubmitError(err instanceof Error ? err : new Error(String(err)));
     } finally {
@@ -77,6 +81,7 @@ export function CaptureScreen(): JSX.Element {
         <Field label="Intent note" hint='What this fragment is for, e.g. "chorus hook, sits over the 2nd drop".'>
           {({ id, describedBy }) => (
             <textarea
+              ref={noteRef}
               id={id}
               aria-describedby={describedBy}
               className="input input--textarea"
@@ -114,7 +119,7 @@ export function CaptureScreen(): JSX.Element {
         {submitError ? <ErrorMessage error={submitError} /> : null}
         {lastCaptured ? (
           <p className="message message--ok" role="status">
-            Captured fragment <code>{lastCaptured.slice(0, 8)}</code> — feature extraction enqueued.
+            Captured fragment <code>{shortId(lastCaptured)}</code> — feature extraction enqueued.
           </p>
         ) : null}
       </form>

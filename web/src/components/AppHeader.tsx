@@ -44,7 +44,7 @@ export function AppHeader({
     <header className="app__header">
       <div className="app__brand">
         <span className="app__brand-mark" aria-hidden="true" />
-        <span className="app__brand-name">Nameless</span>
+        <h1 className="app__brand-name">Nameless</h1>
         <span className="app__brand-tag">audio-native composition · M0</span>
       </div>
 
