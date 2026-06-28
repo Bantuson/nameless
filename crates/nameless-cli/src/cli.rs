@@ -457,6 +457,19 @@ pub fn do_sample_add(
 
     let (start_ms, end_ms) = args.time_range;
 
+    // SAMP-05: the slice must lie within the stem's known length — the credits sheet is the honesty
+    // artifact and must never record a range the source does not contain. When `duration_ms` is known
+    // (the separator may defer it; see IN-03), reject an out-of-range end with a clear error and
+    // create nothing. (`parse_time_range` already guarantees `end_ms > start_ms`.)
+    if let Some(stem_len) = stem.duration_ms {
+        if end_ms > stem_len {
+            return Err(CliError::SampleOutOfRange(format!(
+                "time range {start_ms}-{end_ms} ms exceeds stem length {stem_len} ms (stem {})",
+                stem.id
+            )));
+        }
+    }
+
     let partial = PartialAttribution {
         source_track_id: Some(stem.reference_track_id),
         stem_id: Some(stem.id),
@@ -473,7 +486,12 @@ pub fn do_sample_add(
         .into_complete()
         .map_err(|e| CliError::IncompleteAttribution(e.to_string()))?;
 
-    // Create the sampled fragment (audio = the stem; range recorded in the attribution).
+    // Create the sampled fragment. CONTRACT: the fragment's `audio_uri` points at the FULL stem, so
+    // its `duration_ms` describes the full stem too (carried straight from the stem) — NOT the slice
+    // length. The slice actually used lives solely in the attribution's [start_ms, end_ms) range, and
+    // the M1 exporter trims to it at render time. (Setting `duration_ms` to the slice length here
+    // would describe bytes the URI does not yet address — a latent trap for any consumer assuming
+    // `duration_ms` matches `audio_uri`.)
     let note = format!(
         "sampled {} from {} — {}",
         complete.stem_type.as_str(),
@@ -483,7 +501,7 @@ pub fn do_sample_add(
     let frag = Fragment::new_sampled(
         args.project,
         stem.audio_uri.clone(),
-        Some(end_ms.saturating_sub(start_ms)),
+        stem.duration_ms,
         stem.sample_rate,
         note,
     );
@@ -1004,6 +1022,43 @@ mod tests {
             .list_project_attributions(args.project)
             .unwrap()
             .is_empty());
+    }
+
+    /// WR-04: a slice that runs past the stem's known length is rejected (SAMP-05) and creates
+    /// nothing — the credits sheet never records a range the source does not contain.
+    #[test]
+    fn sample_add_rejects_slice_beyond_stem_length() {
+        let plane = in_memory_plane();
+        let track = ReferenceTrack::new_upload(
+            "trackhash".into(),
+            Some("Trust".into()),
+            Some("Brent Faiyaz".into()),
+            None,
+            None,
+        );
+        plane.references.insert_track(&track).unwrap();
+        let stem = seed_stem(&plane, track.id); // duration_ms = 210_000
+
+        let args = SampleAddArgs {
+            stem: stem.id,
+            project: ProjectId::new(),
+            artist: "Brent Faiyaz".into(),
+            time_range: (200_000, 220_000), // end 220_000 > stem 210_000
+            rights: RightsArg::CopyrightedUncleared,
+            title: None,
+        };
+        assert!(matches!(
+            do_sample_add(&plane, &args),
+            Err(CliError::SampleOutOfRange(_))
+        ));
+        // Nothing created: no fragment, no attribution, no job.
+        assert!(plane.repo.list_fragments(None).unwrap().is_empty());
+        assert!(plane
+            .samples
+            .list_project_attributions(args.project)
+            .unwrap()
+            .is_empty());
+        assert!(plane.queue.consume().unwrap().is_none());
     }
 
     #[test]

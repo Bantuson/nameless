@@ -32,6 +32,12 @@ pub enum CliError {
     #[error("{0}")]
     IncompleteAttribution(String),
 
+    /// A `sample add` was rejected because the requested slice lies outside the stem's known length
+    /// (SAMP-05 — the credits sheet must not record a range the source does not contain). Nothing
+    /// was created.
+    #[error("{0}")]
+    SampleOutOfRange(String),
+
     #[error("configuration error: {0}")]
     Config(String),
 }
