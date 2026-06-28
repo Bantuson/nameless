@@ -24,7 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Reference-Track Context** - Upload a finished song; get its vibe + non-melodic sonic targets, with cloning structurally impossible ✓ (102 py tests; Rust reviewed; course-mode)
 - [x] **Phase 8: Stem Library + Attributed Sampling** - Separate tracks into a retained stem library; promote a stem to an attributed sample with a credits sheet ✓ (115 py tests; Rust reviewed; course-mode)
 - [x] **Phase 9: Thin Web UI** - Do the core M0 loop — capture, reference upload, stem sampling, project review — in the browser ✓ (40 vitest + tsc + build, all ran here)
-- [ ] **Phase 10: Control-Plane HTTP API** - The axum server exposing the `NamelessApi` contract the web UI calls (deferred from Phase 1; the UI had only a Mock backend until now) — INSERTED 2026-06-28
+- [x] **Phase 10: Control-Plane HTTP API** - The axum server exposing the `NamelessApi` contract the web UI calls (deferred from Phase 1) ✓ (axum 0.8; contract-parity reviewed CLEAN vs the TS client; reviewed + fixed; env-gated — not compiled on the 4GB box) — INSERTED 2026-06-28, completed 2026-06-29
 
 ## Phase Details
 
@@ -200,4 +200,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Reference-Track Context | 1/1 | ✓ Complete (102 py tests) | 2026-06-28 |
 | 8. Stem Library + Attributed Sampling | 1/1 | ✓ Complete (115 py tests) | 2026-06-28 |
 | 9. Thin Web UI | 1/1 | ✓ Complete (40 vitest) | 2026-06-28 |
-| 10. Control-Plane HTTP API | 0/1 | ◔ In progress (inserted) | — |
+| 10. Control-Plane HTTP API | 1/1 | ✓ Complete (reviewed CLEAN; env-gated) | 2026-06-29 |

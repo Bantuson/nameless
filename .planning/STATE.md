@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 9
-current_phase_name: Thin Web UI
+current_phase: 10
+current_phase_name: Control-Plane HTTP API
 status: milestone_complete
-stopped_at: ALL 9 PHASES COMPLETE — M0 milestone delivered (course-project mode). 394 tests pass here (knowledge-pipeline 239 + workers 115 + web 40); Rust written+reviewed (env-gated compile).
-last_updated: "2026-06-28T12:00:00.000Z"
-last_activity: 2026-06-28
-last_activity_desc: Full per-phase code review (all 9 phases) THEN auto-fix — 4 critical + 32 warning fixed across 32 commits; 33 info deferred. Tests now 438 pass here (kp 268 / workers 125 / web 45 + tsc + build). Rust fixes env-gated (uncompiled).
+stopped_at: M0 (9 phases) delivered + reviewed + fixed; PLUS inserted Phase 10 (axum control-plane HTTP API) — built, contract-parity reviewed CLEAN vs the TS client, fixed. All Rust env-gated (uncompiled, 4GB/no-toolchain).
+last_updated: "2026-06-29T00:00:00.000Z"
+last_activity: 2026-06-29
+last_activity_desc: Info-findings sweep (11 commits) + built Phase 10 axum HTTP API (the deferred web backend) — reviewed CLEAN on contract parity, 2 warnings + 1 info fixed. Python/web tests still green (438); all Rust env-gated.
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 13
-  completed_plans: 13
+  total_phases: 10
+  completed_phases: 10
+  total_plans: 14
+  completed_plans: 14
   percent: 100
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-26)
 
 **Core value:** Translate the music in your head into genuinely good output — grounded in real production craft (knowledge layer) and your taste (reference tracks + samples). Quality in, quality out.
-**Current focus:** M0 / v1.0 milestone COMPLETE — outstanding work is independent code review (zero ran for any phase)
+**Current focus:** M0 reviewed + fixed + Info-swept; axum HTTP API (Phase 10) built so the web UI has a real backend. Next: cargo/ML/DB verification on a capable machine (clears all env-gated work), then M1.
 
 ## Current Position
 
-Phase: 9 of 9 — ALL phases built & committed (milestone_complete)
-Plan: n/a — milestone delivered (course-project mode)
-Status: M0 functionally complete + FIRST independent code review DONE + all 4 critical & 32 warning findings FIXED (32 commits). 438 tests pass here (kp 268 / workers 125 / web 45 + tsc + build). Rust/ML/LLM fixes applied by reading — env-gated, need cargo + real ML/DB to verify.
-Last activity: 2026-06-28 — review + auto-fix complete
+Phase: 10 of 10 — M0 (9) + inserted Phase 10 (axum HTTP API) all built & committed
+Plan: n/a — course-project mode
+Status: M0 reviewed + ALL 4 critical & 32 warning FIXED + 33 Info swept (most fixed). Phase 10 axum API built, contract-parity reviewed CLEAN, 2 warnings + 1 info fixed. 438 Python/web tests pass here; ALL Rust (incl. the new axum crate) is env-gated — applied by reading, never compiled.
+Last activity: 2026-06-29 — Info sweep + Phase 10 axum API (build → review → fix)
 
-Progress: [██████████] 100% (build) · review DONE · fixes DONE · env-gated verify + security review + axum API + M1 pending
+Progress: [██████████] 100% (build) · review DONE · fixes DONE · Info swept · axum API DONE · env-gated cargo/ML/DB verify + security pass + M1 pending
 
 ### Code review results (2026-06-28, first independent review — `NN-REVIEW.md` per phase)
 
