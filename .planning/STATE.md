@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 8
-current_phase_name: Stem Library + Attributed Sampling
+current_phase: 9
+current_phase_name: Thin Web UI
 status: executing
-stopped_at: Phase 7 verified (102 py tests; structural non-cloning) — starting Phase 8 (Stem Library + Attributed Sampling)
+stopped_at: Phase 8 verified (115 py tests; attribution invariant) — starting Phase 9 (Thin Web UI) — FINAL phase
 last_updated: "2026-06-27T21:17:05.662Z"
 last_activity: 2026-06-27
 last_activity_desc: Phase 1 implemented — 3-crate Rust control plane (ports/adapters + typed state machine + content-hash storage + job queue + CLI + postgres-feature leaf)
