@@ -57,6 +57,23 @@ def test_skill_cites_both_tutorial_and_audio_evidence(grounding_plane):
     assert "## Grounding" in body
 
 
+def test_frontmatter_confidence_matches_the_registry_tier(grounding_plane):
+    # WR-01: the confidence label inside the emitted SKILL.md frontmatter (what the M1 agent loads) MUST
+    # equal AuthoredSkill.confidence_tier (what `skills show/list/audit/stats` report). One source of truth.
+    pipeline, store, _claims, _fx = grounding_plane
+    outcome = pipeline.ground()
+    skill = store.get_skill(outcome.skill_id)
+
+    frontmatter_confidence = None
+    for line in skill.body_md.splitlines():
+        if line.startswith("confidence:"):
+            frontmatter_confidence = line.split(":", 1)[1].strip()
+            break
+
+    assert frontmatter_confidence is not None
+    assert frontmatter_confidence == skill.confidence_tier == outcome.confidence == "LOW"
+
+
 def test_reused_parent_conflict_survives_into_the_grounded_skill(grounding_plane):
     # The bundled amapiano log-drum FLEX-vs-layered conflict is reused as parent evidence and preserved.
     pipeline, store, _claims, _fx = grounding_plane

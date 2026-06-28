@@ -17,10 +17,13 @@ def test_no_direct_tutorials_is_low_no_matter_how_much_audio_corroborates():
     assert is_low_by_construction(0)
 
 
-def test_some_direct_tutorials_plus_broad_corroboration_can_reach_med_but_never_high():
-    # A sparse genre never reads HIGH off a decomposition; the ceiling is MED.
-    assert grounding_confidence(direct_tutorial_sources=3, parent_techniques=2, audio_track_count=3) == "MED"
+def test_grounded_path_is_always_low_regardless_of_direct_tutorials():
+    # WR-01: the grounded path is LOW unconditionally — the MED ceiling was a divergent second source of
+    # truth vs AuthoredSkill.confidence_tier (which forces LOW for grounded). No argument can lift it.
+    assert grounding_confidence(direct_tutorial_sources=3, parent_techniques=2, audio_track_count=3) == "LOW"
     assert grounding_confidence(direct_tutorial_sources=1, parent_techniques=3, audio_track_count=3) == "LOW"
+    assert grounding_confidence(direct_tutorial_sources=99, parent_techniques=9, audio_track_count=99) == "LOW"
+    # is_low_by_construction still reflects the "no direct tutorials" floor independently of the tier.
     assert not is_low_by_construction(3)
 
 

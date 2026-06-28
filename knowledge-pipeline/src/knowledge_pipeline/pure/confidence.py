@@ -10,11 +10,12 @@ such").
 
 So the rule is deliberately blunt and conservative:
 
-  * **No direct tutorials -> LOW, always.** Grounded by decomposition + audio analysis is real evidence,
+  * **The grounded path is LOW, always.** Grounded by decomposition + audio analysis is real evidence,
     but it is *indirect* and *thin*; it is never settled craft. This is the KNOW-10 invariant, and it is a
-    tested one.
-  * Some direct tutorials could lift it, but even then the sparsity discount keeps it at most MED — a
-    sparse genre never reads HIGH off a decomposition.
+    tested one. It is also the SINGLE source of truth: :attr:`knowledge_pipeline.domain.skills.AuthoredSkill.confidence_tier`
+    independently forces ``LOW`` for any ``grounded`` skill, so the label inside the emitted SKILL.md
+    frontmatter and the label the registry/CLI report can never disagree (WR-01). A genre with enough
+    direct tutorials to read higher should be authored on the NORMAL path, not grounded here.
 
 The companion :func:`grounding_note` produces the explicit prose stamp that rides in the skill's
 frontmatter and body: "grounded by decomposition + audio analysis, NOT direct tutorials." Confidence is a
@@ -46,16 +47,17 @@ def grounding_confidence(
         audio_track_count: how many real tracks were analyzed and corroborate the signature.
 
     Returns:
-        ``"LOW"`` whenever there are no direct tutorials (the sparse-genre case) — grounded-by-decomposition
-        is never settled craft. With some direct tutorials AND broad corroboration it may reach ``"MED"``,
-        but a sparse genre never reads ``"HIGH"`` off a decomposition.
+        ``"LOW"`` — always, for the grounded path. Decomposition + audio is thin, indirect evidence and is
+        never settled craft, and this MUST agree with
+        :attr:`knowledge_pipeline.domain.skills.AuthoredSkill.confidence_tier` (which hard-forces ``LOW`` for
+        any grounded skill). A separate ``MED`` ceiling here was the single source of a latent divergence
+        between the emitted frontmatter and the registry (WR-01); it is removed. The ``direct_tutorial_sources``,
+        ``parent_techniques`` and ``audio_track_count`` arguments are retained for the honest receipts in
+        :func:`grounding_note` and for callers that still report them, but they cannot lift the tier.
     """
-    if direct_tutorial_sources <= 0:
-        # The KNOW-10 invariant: decomposition + audio only ⇒ thin, indirect evidence ⇒ LOW.
-        return LOW
-    # Indirectly supported but with SOME direct grounding: a discounted ceiling of MED.
-    if direct_tutorial_sources >= 3 and parent_techniques >= 2 and audio_track_count >= 3:
-        return MED
+    # The KNOW-10 invariant, now unconditional: grounded ⇒ thin, indirect evidence ⇒ LOW. This is the one
+    # source of truth for a grounded skill's confidence; the registry (confidence_tier) agrees by forcing
+    # LOW for grounded too, so the file the agent loads and the CLI/registry never disagree (WR-01).
     return LOW
 
 
