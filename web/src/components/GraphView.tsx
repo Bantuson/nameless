@@ -7,13 +7,9 @@
  */
 
 import type { FragmentNode, ProjectGraph } from '../api/types';
-import { kindLabel, notePreview } from '../lib/format';
+import { kindLabel, notePreview, shortId } from '../lib/format';
 import { ProvenanceTag, StatePill } from './badges';
 import { EmptyState } from './ui';
-
-function shortId(id: string): string {
-  return id.slice(0, 8);
-}
 
 export function GraphView({ graph }: { graph: ProjectGraph }): JSX.Element {
   if (graph.nodes.length === 0) {

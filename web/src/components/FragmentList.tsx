@@ -1,13 +1,9 @@
 /** Pure list of a project's fragments — id (short) + state + kind + note. */
 
 import type { FragmentSummary } from '../api/types';
-import { kindLabel, notePreview } from '../lib/format';
+import { kindLabel, notePreview, shortId } from '../lib/format';
 import { StatePill } from './badges';
 import { EmptyState } from './ui';
-
-function shortId(id: string): string {
-  return id.slice(0, 8);
-}
 
 export function FragmentList({ fragments }: { fragments: FragmentSummary[] }): JSX.Element {
   if (fragments.length === 0) {

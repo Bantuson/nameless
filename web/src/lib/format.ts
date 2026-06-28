@@ -5,6 +5,11 @@
 
 import type { FragmentKind, FragmentState, Provenance, ReferenceRole, StemType } from '../api/types';
 
+/** Shorten a UUID for compact display — the first 8 chars. The full id is shown on hover (title). */
+export function shortId(id: string): string {
+  return id.slice(0, 8);
+}
+
 /** Human label for a fragment kind. */
 export function kindLabel(kind: FragmentKind): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);

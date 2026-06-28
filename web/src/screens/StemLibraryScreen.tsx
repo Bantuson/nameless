@@ -13,6 +13,7 @@ import { StemTable } from '../components/StemTable';
 import { Banner, Button, ErrorMessage, Field, Loading } from '../components/ui';
 import { useReferences } from '../hooks/useReferences';
 import { useStemLibrary } from '../hooks/useStemLibrary';
+import { shortId } from '../lib/format';
 import { NoProjectNotice } from './common';
 
 export function StemLibraryScreen(): JSX.Element {
@@ -151,7 +152,7 @@ export function StemLibraryScreen(): JSX.Element {
 
       {addResult ? (
         <Banner tone="info" title="Sample added">
-          Created sampled fragment <code>{addResult.fragment.slice(0, 8)}</code> from{' '}
+          Created sampled fragment <code>{shortId(addResult.fragment)}</code> from{' '}
           <strong>{addResult.source_title}</strong> — {addResult.source_artist}. It travels the human
           analysis path; its credit appears on the Project screen.
         </Banner>

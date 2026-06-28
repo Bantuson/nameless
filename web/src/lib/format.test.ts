@@ -4,12 +4,18 @@ import {
   msToSeconds,
   notePreview,
   provenanceLabel,
+  shortId,
   stereoWidth,
   tempoRange,
   timeRangeLabel,
 } from './format';
 
 describe('format helpers', () => {
+  it('shortens an id to its first 8 chars', () => {
+    expect(shortId('0123456789abcdef')).toBe('01234567');
+    expect(shortId('abc')).toBe('abc');
+  });
+
   it('formats a tempo range, collapsing a zero-width range', () => {
     expect(tempoRange(110, 114)).toBe('110–114 BPM');
     expect(tempoRange(112, 112)).toBe('112 BPM');
