@@ -98,8 +98,11 @@ export class HttpNamelessApi implements NamelessApi {
   }
 
   attachReference(input: AttachReferenceInput): Promise<AttachReferenceResult> {
+    // Body keys are snake_case to match the Rust serde contract (`reference.rs`). The Mock reads
+    // the TS input object directly and never exercises wire naming, so this is the only place the
+    // on-the-wire field names are asserted (see the parity test). [env-gated — no live server here.]
     return this.sendJson('POST', `/projects/${enc(input.projectId)}/references`, {
-      referenceId: input.referenceId,
+      reference_id: input.referenceId,
       role: input.role,
     });
   }
@@ -115,13 +118,17 @@ export class HttpNamelessApi implements NamelessApi {
   }
 
   addSample(input: AddSampleInput): Promise<SampleAddResult> {
+    // Body keys are snake_case to match the Rust attribution contract (`attribution.rs`
+    // `PartialAttribution` + `output.rs`): `stem_id`, `source_artist`, `source_title`, `start_ms`,
+    // `end_ms`, `rights`. camelCase keys would fail to deserialize against the real control plane;
+    // the Mock never catches this because it reads the TS input directly. [env-gated.]
     return this.sendJson('POST', `/projects/${enc(input.projectId)}/samples`, {
-      stemId: input.stemId,
-      artist: input.artist,
-      startMs: input.startMs,
-      endMs: input.endMs,
+      stem_id: input.stemId,
+      source_artist: input.artist,
+      source_title: input.title,
+      start_ms: input.startMs,
+      end_ms: input.endMs,
       rights: input.rights,
-      title: input.title,
     });
   }
 
