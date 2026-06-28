@@ -47,7 +47,11 @@ create type rights_status as enum (
 create table stems (
     id                 uuid primary key,
     reference_track_id uuid not null references reference_tracks (id) on delete cascade,
-    stem_type          text not null,             -- StemType label (vocals|drums|bass|other|piano|guitar)
+    stem_type          text not null              -- StemType label (vocals|drums|bass|other|piano|guitar)
+        check (stem_type in ('vocals','drums','bass','other','piano','guitar')),
+                                                   -- CHECK mirrors the closed Rust/Python StemType enum
+                                                   -- so the DB rejects an invalid label too (otherwise
+                                                   -- only caught on read by parse_stem_type).
     audio_uri          text not null,             -- SHA-256 content-hash object key of the stem audio
     separator_model    text not null,             -- e.g. 'htdemucs_ft' / 'htdemucs_6s'
     separator_version  text not null,             -- e.g. '4.0.1' — bumped ⇒ a re-separation is detectable
@@ -71,14 +75,22 @@ create index stems_reference_track_idx on stems (reference_track_id, created_at_
 --    fragments.audio_uri for a sampled fragment points at the (full or trimmed) stem slice; the
 --    [start_ms, end_ms) range here records which part of the stem was used.
 -- ---------------------------------------------------------------------------------------------
+-- FK delete policy is intentional and asymmetric (preserve credited provenance):
+--   * fragment_id / project_id use ON DELETE CASCADE — deleting the owning fragment or project
+--     legitimately removes its attribution row (the credited work no longer exists).
+--   * reference_track_id / stem_id use the default NO ACTION (restrict) on purpose — a credited
+--     source must NOT be silently deletable while an attribution still points at it. Net effect: a
+--     reference_tracks row that has any sample attribution cannot be deleted (its cascade to `stems`
+--     is blocked by sample_attribution.stem_id). This protects the honesty artifact (credits sheet).
 create table sample_attribution (
     fragment_id        uuid primary key references fragments (id) on delete cascade,
     project_id         uuid not null references projects (id) on delete cascade,
-    reference_track_id uuid not null references reference_tracks (id),
-    stem_id            uuid not null references stems (id),
+    reference_track_id uuid not null references reference_tracks (id), -- restrict: keep credited source
+    stem_id            uuid not null references stems (id),            -- restrict: keep credited stem
     source_title       text not null,             -- never blank (validated before insert)
     source_artist      text not null,
-    stem_type          text not null,
+    stem_type          text not null              -- same closed StemType set as stems.stem_type
+        check (stem_type in ('vocals','drums','bass','other','piano','guitar')),
     start_ms           bigint not null,            -- bigint (not int): the Rust u32 ms range stored
     end_ms             bigint not null,            --   without i32 narrowing, matching --local exactly
     rights_status      rights_status not null,

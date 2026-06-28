@@ -36,7 +36,11 @@ class FeatureExtractJob(BaseModel):
 
 
 class SeparateJob(BaseModel):
-    """Separate a fragment into stems (a fragment-keyed Phase-8 variant; modelled here for parity)."""
+    """RESERVED — fragment-keyed separation; modelled here only for parity with Rust.
+
+    Not enqueued or consumed anywhere today (the live path is ``SeparateTrackJob``). Kept for a
+    future fragment-level separation path; do not assume a live code path. See P8 review IN-01.
+    """
 
     model_config = ConfigDict(frozen=True)
     job: Literal["separate"] = "separate"

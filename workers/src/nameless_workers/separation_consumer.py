@@ -94,6 +94,10 @@ class SeparationJobConsumer:
             ) from exc
 
         # ---- content-hash + build the retained records (pure) ----
+        # duration_ms is intentionally deferred (left None): SeparationResult carries no total
+        # duration, so stems persist with duration_ms=NULL until a future change derives it from the
+        # decoded sample count / sample_rate in the separator. `stems list` therefore omits duration
+        # and WR-04's bounds check has nothing to check against yet. See P8 review IN-03.
         records = build_stem_records(reference_track_id, result)
 
         # ---- retain each stem's bytes (write-if-absent) + persist its record (idempotent) ----

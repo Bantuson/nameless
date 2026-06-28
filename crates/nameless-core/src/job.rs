@@ -31,7 +31,10 @@ use crate::reference::ReferenceTrackId;
 pub enum JobEnvelope {
     /// Compute f0/chroma/onsets/key/LUFS + embeddings for a captured fragment (Phase 2 worker).
     FeatureExtract { fragment_id: FragmentId },
-    /// Separate a track/fragment into stems (Phase 8 sampling worker).
+    /// RESERVED — fragment-keyed separation. Defined and round-trip tested for parity, but NOT
+    /// enqueued or consumed anywhere today: `stems separate` enqueues `SeparateTrack` (track-keyed)
+    /// and the consumer handles only that. Kept for a future fragment-level separation path (M?);
+    /// do not assume a live code path. See P8 review IN-01.
     Separate { fragment_id: FragmentId },
     /// Separate an uploaded reference TRACK into its retained stem library (Phase 8 — SAMP-01).
     /// Enqueued by `stems separate <track>`; handled by the Python `DemucsStemSeparator`, which
