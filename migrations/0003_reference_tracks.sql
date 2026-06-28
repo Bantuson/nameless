@@ -66,17 +66,28 @@ create table reference_context (
     -- back only vector_dims(...), never this vector (the compact-output / by-ID rule).
     clap_style_embedding vector(512),
 
-    -- measurable, NON-melodic targets
+    -- measurable, NON-melodic targets. These are ALWAYS produced by the analyzer for any row that
+    -- exists in this table (a `reference_context` row is only written after a full analysis), so they
+    -- are NOT NULL — that makes the Rust read path (`get_context_summary`) infer concrete `f32`/`text`
+    -- under `cargo sqlx` instead of `Option<…>`, matching the non-`Option` `ReferenceContextSummary`
+    -- fields. (`genre` stays nullable: zero-shot tagging can legitimately abstain.)
     genre            text,
-    tempo_bpm_min    real,                      -- a tempo RANGE (target band), not a beat grid
-    tempo_bpm_max    real,
-    lufs             real,                       -- integrated loudness (ITU-R BS.1770-4)
-    tonal_balance    jsonb,                      -- 5-band energy ratios (coarse spectral shape; never notes)
-    stereo_width     real,                       -- mid/side energy ratio in [0,1]
+    tempo_bpm_min    real   not null,            -- a tempo RANGE (target band), not a beat grid
+    tempo_bpm_max    real   not null,
+    lufs             real   not null,            -- integrated loudness (ITU-R BS.1770-4)
+    -- 5-band energy ratios — persisted as the named-key OBJECT shape produced by
+    -- `NonMelodicFeatures.tonal_balance.model_dump()`: {"low","low_mid","mid","high_mid","high"}.
+    -- This is the pinned cross-language contract the Rust `TonalBalance` struct deserializes (WR-01);
+    -- it is DELIBERATELY never the bands ARRAY form used only for compact CLI/log output. Coarse
+    -- spectral shape; never notes.
+    tonal_balance    jsonb  not null,
+    stereo_width     real   not null,            -- mid/side energy ratio in [0,1]
 
     -- human-facing interpretation (NOT a machine conditioning target — kept at a different trust
-    -- level than the measured fields above; PITFALLS.md Pitfall 5)
-    vibe_description text,                        -- LLM prose: mood / space / era / texture / energy
+    -- level than the measured fields above; PITFALLS.md Pitfall 5). NOT NULL: the analyzer must
+    -- produce a non-empty description or fail loudly (see ClaudeVibeDescriber refusal handling, WR-03)
+    -- rather than persist an empty string.
+    vibe_description text   not null,            -- LLM prose: mood / space / era / texture / energy
 
     analyzer_version text not null,              -- bumped when the extractor/checkpoint changes
     created_at_ms    bigint not null
