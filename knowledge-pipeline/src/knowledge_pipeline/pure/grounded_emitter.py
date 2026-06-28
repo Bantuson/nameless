@@ -72,14 +72,23 @@ def emit_grounded_skill_md(
     )
     lines.append(f"> {note} {audit_state}")
     lines.append(
-        "> Every assertion below is traceable to a cited tutorial claim (video @ timestamp) OR a measured "
-        "audio analysis record (audio:<track>). No claim, number, or technique was invented; nothing about "
-        "melody, chords, or structure was taken from the reference tracks (measured surface only)."
+        "> Every assertion in **Default / Consensus / Contested** below is traceable to a cited tutorial "
+        "claim (video @ timestamp) OR a measured audio analysis record (audio:<track>) and passed the "
+        "citation gate — no claim or number in those layers was invented. The **Grounding** section is the "
+        "editorial decomposition HYPOTHESIS (how this subgenre was composed from its parents): authored "
+        "reasoning, NOT gated citations — read it as such. Nothing about melody, chords, or structure was "
+        "taken from the reference tracks (measured surface only)."
     )
     lines.append("")
 
     # ---- grounding: how this skill was derived (the decomposition + the audio roster) ----
     lines.append("## Grounding — how this skill was derived")
+    lines.append("")
+    lines.append("_Editorial decomposition hypothesis — NOT gated citations. The parent-contribution and "
+                 "negative-space notes below are authored reasoning about how this under-tutorialized "
+                 "subgenre relates to its taught parents; they are not backed by individual tutorial "
+                 "citations and did not pass the citation gate. The gated, cited evidence is in the "
+                 "Default / Consensus / Contested / Citations layers._")
     lines.append("")
     lines.append("**Decomposed into parent techniques** (this subgenre is under-tutorialized, so it is "
                  "composed from its taught parents, never fabricated):")

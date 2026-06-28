@@ -58,6 +58,19 @@ def test_body_carries_the_honest_not_direct_tutorials_note():
     assert "measured surface only" in low or "audio measures surface" in low
 
 
+def test_banner_scopes_traceability_to_gated_layers_not_the_decomposition_prose():
+    # WR-02: the honesty banner must not assert "everything traceable" over the un-cited editorial
+    # decomposition prose in ## Grounding. It scopes the gated guarantee to Default/Consensus/Contested,
+    # and the Grounding section is explicitly labeled an editorial hypothesis, not cited evidence.
+    md = _grounded_md()
+    assert "Default / Consensus / Contested" in md
+    # the old blanket over-claim is gone
+    assert "Every assertion below is traceable" not in md
+    # the decomposition prose is unambiguously flagged as a hypothesis, not gated citations
+    assert "editorial decomposition HYPOTHESIS" in md
+    assert "Editorial decomposition hypothesis — NOT gated citations" in md
+
+
 def test_keeps_the_layered_sections():
     md = _grounded_md()
     for header in ("## Default — act on this", "## Consensus", "## Contested", "## Citations"):
