@@ -6,9 +6,9 @@ current_phase: 9
 current_phase_name: Thin Web UI
 status: milestone_complete
 stopped_at: ALL 9 PHASES COMPLETE — M0 milestone delivered (course-project mode). 394 tests pass here (knowledge-pipeline 239 + workers 115 + web 40); Rust written+reviewed (env-gated compile).
-last_updated: "2026-06-28T00:00:00.000Z"
+last_updated: "2026-06-28T12:00:00.000Z"
 last_activity: 2026-06-28
-last_activity_desc: Full per-phase code review ran (all 9 phases) — first independent review of the milestone. 69 findings (4 critical, 32 warning, 33 info); REVIEW.md per phase committed.
+last_activity_desc: Full per-phase code review (all 9 phases) THEN auto-fix — 4 critical + 32 warning fixed across 32 commits; 33 info deferred. Tests now 438 pass here (kp 268 / workers 125 / web 45 + tsc + build). Rust fixes env-gated (uncompiled).
 progress:
   total_phases: 9
   completed_phases: 9
@@ -30,14 +30,16 @@ See: .planning/PROJECT.md (updated 2026-06-26)
 
 Phase: 9 of 9 — ALL phases built & committed (milestone_complete)
 Plan: n/a — milestone delivered (course-project mode)
-Status: M0 functionally complete; 394 Python/web tests pass; Rust + heavy ML/LLM written but un-run (4GB/no-toolchain). FIRST independent code review now DONE (all 9 phases) — 69 findings, fixes pending.
-Last activity: 2026-06-28 — full per-phase code review (4 critical, 32 warning, 33 info)
+Status: M0 functionally complete + FIRST independent code review DONE + all 4 critical & 32 warning findings FIXED (32 commits). 438 tests pass here (kp 268 / workers 125 / web 45 + tsc + build). Rust/ML/LLM fixes applied by reading — env-gated, need cargo + real ML/DB to verify.
+Last activity: 2026-06-28 — review + auto-fix complete
 
-Progress: [██████████] 100% (build) · review DONE · fixes + true-exec pending
+Progress: [██████████] 100% (build) · review DONE · fixes DONE · env-gated verify + security review + axum API + M1 pending
 
 ### Code review results (2026-06-28, first independent review — `NN-REVIEW.md` per phase)
 
 Totals: 4 critical · 32 warning · 33 info (69 findings). Status per phase: all `issues`.
+
+**FIXED (same session, 32 `fix(NN)` commits):** all 4 critical + all 32 warning. 33 info deferred (out of scope). Fixers ran in 3 disjoint lanes (Rust+workers · knowledge-pipeline · web) to avoid file clobbering; +44 new regression tests. Verified-here: kp 268 / workers 125 / web 45 (438 total) + tsc + build. **Env-gated (NOT verified — applied by reading):** all Rust changes (no toolchain) — `cargo test --workspace` + `cargo build --features postgres` against a migrated DB to clear; the real ML/LLM/Demucs adapter paths likewise un-run. Marquee fix: `Fragment.state`/`provenance` now module-private with `apply()`/`place_sampled(&CompleteAttribution)` as sole mutators — the gate is now structural, not convention (env-gated until compiled).
 
 **Critical (4):**
 - P2 CR-01 — Python `repo.advance()` mirrors Rust `transition()` not `apply()`/`place()`, so `advance(PLACE)` on a `sampled` fragment bypasses the attribution gate Rust enforces (cross-language legality divergence).

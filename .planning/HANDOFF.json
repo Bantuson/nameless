@@ -4,11 +4,11 @@
   "phase": "milestone-complete",
   "phase_name": "M0 / v1.0 — all 9 phases built",
   "phase_dir": ".planning",
-  "status": "paused",
-  "head_commit": "890b446",
-  "reason_paused": "context budget high; milestone functionally complete",
+  "status": "resumed_2026-06-28: review + auto-fix complete",
+  "head_commit": "see git log (32 fix commits + review docs since 890b446)",
+  "reason_paused": "SUPERSEDED — resumed 2026-06-28: ran first full per-phase code review + auto-fixed all 4 critical & 32 warning findings",
   "build_mode": "course-project: complete code, NOT run on 4GB/no-Docker/no-Rust machine; testability-first law",
-  "tests_run_locally": {"phase2": 58, "phase3": 77, "phase4": 134, "phase5": 201, "phase6": 239, "phase7_py": 102, "phase8_py": 115, "phase9_vitest": 40, "note": "Rust (P1/7/8) written but NOT compiled; ML/LLM adapters written but NOT run"},
+  "tests_run_locally": {"knowledge_pipeline": 268, "workers": 125, "web_vitest": 40, "web_after_fixes": 45, "total_after_fixes": 438, "note": "Rust (P1/7/8) + review fixes to Rust/SQL written but NOT compiled (no toolchain); ML/LLM/Demucs adapters written but NOT run. +44 regression tests added by the fixes."},
   "completed_tasks": [
     {"id": 1, "name": "Phase 1 Typed Capture Spine (Rust)", "status": "built", "verified": "review-only (no cargo)"},
     {"id": 2, "name": "Phase 2 Fragment Analysis (Py)", "status": "built", "verified": "58 tests ran"},
@@ -21,9 +21,10 @@
     {"id": 9, "name": "Phase 9 Thin Web UI (React/TS)", "status": "built", "verified": "40 vitest + tsc + build ALL ran here"}
   ],
   "remaining_tasks": [
-    {"id": 10, "name": "Independent code review (NONE ran for any phase)", "status": "not_started", "how": "/gsd-code-review whole-branch or per-phase; start with Rust integrity boundaries + citation_gate.py"},
-    {"id": 11, "name": "Security review of integrity boundaries", "status": "not_started", "how": "/gsd-secure-phase candidates: state machine, non-cloning, attribution"},
-    {"id": 12, "name": "True execution on a capable machine", "status": "not_started", "how": "install Rust + Python ML env + Postgres; run each NN-VERIFICATION.md env-gated commands"},
+    {"id": 10, "name": "Independent code review", "status": "DONE_2026-06-28", "how": "Full per-phase review (all 9) + auto-fix ran. 69 findings; ALL 4 critical + 32 warning FIXED across 32 fix(NN) commits; 33 info deferred. See NN-REVIEW.md per phase + STATE.md 'Code review results'."},
+    {"id": 11, "name": "Security review of integrity boundaries", "status": "partially_covered", "how": "/gsd-secure-phase candidates: state machine, non-cloning, attribution. Code-review already hit injection/path-traversal/SQLi and FIXED P3 path-traversal + P5 markdown-injection; a dedicated security pass is still worthwhile."},
+    {"id": 12, "name": "True execution on a capable machine — NOW TOP PRIORITY (clears the env-gated review fixes)", "status": "not_started", "how": "install Rust + Python ML env + Postgres. FIRST: cargo test --workspace + cargo build --features postgres against a DB migrated 0001-0004 — the review fixes to the Rust core/adapters/SQL were applied by reading and NEVER compiled (incl. the Fragment private-field hardening + place_sampled gate + bigint widening + NOT NULL columns). Then run each NN-VERIFICATION.md env-gated command."},
+    {"id": 15, "name": "33 deferred Info findings", "status": "not_started", "how": "Per-phase NN-REVIEW.md Info sections (style/nits/minor robustness). Optional; /gsd-code-review NN --fix --all to sweep, or address ad hoc."},
     {"id": 13, "name": "Build the axum HTTP API the web UI expects (deferred in Phase 1)", "status": "not_started", "how": "new phase or M1; only the CLI exists today"},
     {"id": 14, "name": "M1 milestone (generation + eval gate + mix/master/export)", "status": "not_started", "how": "/gsd-new-milestone"}
   ],
@@ -54,6 +55,6 @@
     "understand_artifacts": ".understand-anything/ (uncommitted)",
     "installed": "py3.12 pytest/pydantic/numpy; web/node_modules; dashboard node_modules"
   },
-  "next_action": "Run /gsd-code-review scoped to Rust integrity boundaries (state_machine.rs, attribution.rs, reference.rs/conditioning.rs) + pure citation_gate.py; then per-phase review or move to a capable machine for true execution.",
-  "context_notes": "All 9 phases real + committed. Python/web layers genuinely run+pass (394 tests). Rust + heavy-ML/LLM written but never executed (4GB/no-toolchain). The big gap is ZERO independent code review. Honesty rule: distinguish 'tests ran' from 'reviewed + env-gated'."
+  "next_action": "Code review + fixes are DONE. Next: move to a Rust/ML/Postgres-capable machine and run `cargo test --workspace` + `cargo build --features postgres` (migrations 0001-0004) to CLEAR the env-gated review fixes — these touched the Rust integrity core (private Fragment fields, place_sampled gate, bigint widening, NOT NULL columns) and have never been compiled. Then: optional /gsd-secure-phase, the 33 Info findings, build the deferred axum HTTP API, or /gsd-new-milestone for M1.",
+  "context_notes": "All 9 phases real + committed. First independent code review RAN this session (2026-06-28) across all 9 phases, then all 4 critical + 32 warning findings were auto-fixed (32 fix commits, +44 regression tests). Tests now 438 pass here (kp 268 / workers 125 / web 45 + tsc + build). The cross-cutting marquee fix made the eval/attribution gate STRUCTURAL (Fragment fields private, apply()/place_sampled() sole mutators) instead of convention — but, like all Rust/ML/LLM fixes, it is applied-by-reading and ENV-GATED until compiled on a capable machine. Honesty rule still holds: distinguish 'tests ran' (Python/web) from 'reviewed + fixed + env-gated' (Rust/ML/LLM)."
 }
