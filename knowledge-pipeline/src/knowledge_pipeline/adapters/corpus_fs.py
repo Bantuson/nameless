@@ -90,6 +90,14 @@ class FilesystemCorpusStore:
             self._conn.close()
             self._conn = None
 
+    # Context-manager support so CLI handlers can deterministically release the sqlite handle and its
+    # WAL/-shm sidecars instead of leaning on process exit (IN-04).
+    def __enter__(self) -> "FilesystemCorpusStore":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     # ---- schema ----
     def init_schema(self) -> None:
         conn = self._connection()

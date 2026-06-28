@@ -171,8 +171,12 @@ def _visual_only_penalty(text: str, cfg: ScoringConfig) -> float:
     return max(0.0, min(cfg.max_visual_penalty, penalty))
 
 
-def _verdict(score: float, visual_penalty: float, source: CaptionSource, cfg: ScoringConfig) -> Verdict:
-    """Map score + signals to KEEP / LOW_SIGNAL / REJECT."""
+def _verdict(score: float, source: CaptionSource, cfg: ScoringConfig) -> Verdict:
+    """Map score + signals to KEEP / LOW_SIGNAL / REJECT.
+
+    The visual-only penalty is already folded into ``score`` (see ``extractability_score``), so the
+    verdict is purely score+source driven — no separate ``visual_penalty`` argument is needed (IN-01).
+    """
     if source is CaptionSource.NONE:
         # No spoken text recovered at all (and ASR did not run / produced nothing). Nothing to distil.
         return Verdict.REJECT
@@ -212,7 +216,7 @@ def extractability_score(
     )
     score = max(0.0, min(1.0, base * (1.0 - visual_penalty)))
 
-    verdict = _verdict(score, visual_penalty, transcript.caption_source, cfg)
+    verdict = _verdict(score, transcript.caption_source, cfg)
 
     # ---- flags: machine-actionable reasons (what the CLI and Phase-4 weighting key on) ----
     flags: list[str] = []

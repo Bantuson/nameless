@@ -172,15 +172,15 @@ def _handle_ingest(args: argparse.Namespace) -> int:
 
 
 def _handle_list(args: argparse.Namespace) -> int:
-    store = _build_store(args.corpus_root)
-    store.init_schema()
-    verdict = Verdict(args.verdict) if args.verdict else None
-    entries = store.list_entries(
-        genre=args.genre,
-        verdict=verdict,
-        min_score=args.min_score,
-        order_by_score=args.by_extractability,
-    )
+    with _build_store(args.corpus_root) as store:
+        store.init_schema()
+        verdict = Verdict(args.verdict) if args.verdict else None
+        entries = store.list_entries(
+            genre=args.genre,
+            verdict=verdict,
+            min_score=args.min_score,
+            order_by_score=args.by_extractability,
+        )
 
     if args.json:
         print(json.dumps([e.model_dump(mode="json") for e in entries], indent=2))
@@ -204,45 +204,45 @@ def _handle_list(args: argparse.Namespace) -> int:
 
 
 def _handle_show(args: argparse.Namespace) -> int:
-    store = _build_store(args.corpus_root)
-    store.init_schema()
-    entry = store.get(args.video_id)
-    if entry is None:
-        raise SystemExit(f"no corpus entry for {args.video_id}")
+    with _build_store(args.corpus_root) as store:
+        store.init_schema()
+        entry = store.get(args.video_id)
+        if entry is None:
+            raise SystemExit(f"no corpus entry for {args.video_id}")
 
-    if args.json:
-        print(entry.model_dump_json(indent=2))
-    else:
-        v, s, x = entry.video, entry.snapshot, entry.extractability
-        print(f"video_id     {v.video_id}")
-        print(f"title        {v.title}")
-        print(f"channel      {v.channel or '-'}")
-        print(f"genre/stage  {v.genre or '-'} / {v.stage or '-'}")
-        print(f"query_origin {v.query_origin or '-'}")
-        print(f"caption_src  {s.caption_source.value}  ({s.segment_count} segments, {s.char_count} chars)")
-        print(f"sha256       {s.content_sha256}")
-        print(f"retrieved    {s.retrieval_date.isoformat()}")
-        print(f"score        {x.score:.3f}  ->  {x.verdict.value}")
-        print(
-            f"  components  caption={x.caption_source_weight:.2f} density={x.word_density:.2f} "
-            f"vocab={x.vocab_presence:.2f} actionable={x.actionable_ratio:.2f} "
-            f"visual_penalty={x.visual_only_penalty:.2f}"
-        )
-        print(f"  flags       {', '.join(x.flags) if x.flags else '-'}")
+        if args.json:
+            print(entry.model_dump_json(indent=2))
+        else:
+            v, s, x = entry.video, entry.snapshot, entry.extractability
+            print(f"video_id     {v.video_id}")
+            print(f"title        {v.title}")
+            print(f"channel      {v.channel or '-'}")
+            print(f"genre/stage  {v.genre or '-'} / {v.stage or '-'}")
+            print(f"query_origin {v.query_origin or '-'}")
+            print(f"caption_src  {s.caption_source.value}  ({s.segment_count} segments, {s.char_count} chars)")
+            print(f"sha256       {s.content_sha256}")
+            print(f"retrieved    {s.retrieval_date.isoformat()}")
+            print(f"score        {x.score:.3f}  ->  {x.verdict.value}")
+            print(
+                f"  components  caption={x.caption_source_weight:.2f} density={x.word_density:.2f} "
+                f"vocab={x.vocab_presence:.2f} actionable={x.actionable_ratio:.2f} "
+                f"visual_penalty={x.visual_only_penalty:.2f}"
+            )
+            print(f"  flags       {', '.join(x.flags) if x.flags else '-'}")
 
-    if args.segments > 0:
-        snapshot = store.load_snapshot(args.video_id)
-        if snapshot is not None:
-            print(f"\n# first {args.segments} snapshot segments (video_id @ ts citation anchors)")
-            for seg in snapshot.segments[: args.segments]:
-                print(f"  [{seg.start_s:>7.2f}s] {seg.text}")
+        if args.segments > 0:
+            snapshot = store.load_snapshot(args.video_id)
+            if snapshot is not None:
+                print(f"\n# first {args.segments} snapshot segments (video_id @ ts citation anchors)")
+                for seg in snapshot.segments[: args.segments]:
+                    print(f"  [{seg.start_s:>7.2f}s] {seg.text}")
     return 0
 
 
 def _handle_stats(args: argparse.Namespace) -> int:
-    store = _build_store(args.corpus_root)
-    store.init_schema()
-    stats = store.stats()
+    with _build_store(args.corpus_root) as store:
+        store.init_schema()
+        stats = store.stats()
     if args.json:
         print(stats.model_dump_json(indent=2))
         return 0

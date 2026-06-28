@@ -20,7 +20,13 @@ from ..ports import Clock
 
 
 class IntervalRateLimiter:
-    """Sleep so that consecutive ``acquire`` calls are at least ``min_interval_s`` apart (+ jitter)."""
+    """Sleep so that consecutive ``acquire`` calls are at least ``min_interval_s`` apart (+ jitter).
+
+    NOT thread/async-safe (IN-02): ``acquire`` reads/writes ``self._last_acquire`` without a lock. This
+    is correct for the current single-threaded sequential pipeline. If discovery/fetch are ever
+    parallelized, guard ``acquire`` with a ``threading.Lock`` — concurrent calls would otherwise race and
+    under-throttle (the project's stated worst case: IP blocking).
+    """
 
     def __init__(
         self,
