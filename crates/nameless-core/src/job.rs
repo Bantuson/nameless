@@ -33,6 +33,12 @@ pub enum JobEnvelope {
     FeatureExtract { fragment_id: FragmentId },
     /// Separate a track/fragment into stems (Phase 8 sampling worker).
     Separate { fragment_id: FragmentId },
+    /// Separate an uploaded reference TRACK into its retained stem library (Phase 8 — SAMP-01).
+    /// Enqueued by `stems separate <track>`; handled by the Python `DemucsStemSeparator`, which
+    /// retains every stem by content-hash and writes the `stems` index rows. Keyed by the reference
+    /// track (the same uploaded audio Phase 7 analyzes for vibe) — a track is both reference + sample
+    /// source ("choose dynamically, even weeks later", ARCHITECTURE.md Flow B).
+    SeparateTrack { reference_track_id: ReferenceTrackId },
     /// Extract NON-melodic reference context (CLAP style embedding + vibe + sonic targets) for an
     /// uploaded reference track (Phase 7 worker). Enqueued by `reference upload`; handled by the
     /// Python `RestrictedReferenceAnalyzer`, which never computes f0/chroma (the non-cloning path).
@@ -182,6 +188,19 @@ mod tests {
         };
         let json = serde_json::to_string(&env).unwrap();
         assert!(json.contains("\"job\":\"separate\""));
+        let back: JobEnvelope = serde_json::from_str(&json).unwrap();
+        assert_eq!(env, back);
+    }
+
+    #[test]
+    fn separate_track_envelope_json_round_trips() {
+        let env = JobEnvelope::SeparateTrack {
+            reference_track_id: crate::reference::ReferenceTrackId::new(),
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        // Self-describing snake_case tag — the exact shape the Python separation worker discriminates on.
+        assert!(json.contains("\"job\":\"separate_track\""));
+        assert!(json.contains("reference_track_id"));
         let back: JobEnvelope = serde_json::from_str(&json).unwrap();
         assert_eq!(env, back);
     }

@@ -5,12 +5,41 @@ fragment to `analyzed` by computing audio features + joint CLAP embeddings, pers
 typed lifecycle, and make fragments retrievable by note text or audio similarity (pgvector).
 **Phase 7** adds the *reference-track context* layer: analyze an uploaded finished song into its
 **vibe + measurable non-melodic sonic targets** — with cloning made *structurally* impossible.
+**Phase 8** adds *stem separation*: Demucs-separate any uploaded track into a retained, browsable stem
+library (content-addressed, with separator-model provenance) that the control plane promotes into
+attributed `sampled` fragments.
 
 - Requirements covered: **CAP-03** (f0, chroma, onsets/beat-grid/tempo, key, LUFS) and **CAP-04**
   (CLAP audio + note-text embeddings indexed in pgvector for retrieval); **REF-02** (non-melodic
-  vibe + sonic targets + LLM vibe description) and **REF-03** (structural non-cloning).
+  vibe + sonic targets + LLM vibe description) and **REF-03** (structural non-cloning); **SAMP-01**
+  (Demucs stems retained + browsable, with separator model/version provenance).
 - The DSP/ML is explained in depth in **[`LEARNING.md`](./LEARNING.md)** — see §11b for the Phase-7
-  reference layer and *why non-cloning must be structural, not conventional*.
+  reference layer, and §11c for Phase-8 *source separation, attribution-clean sampling, the honest
+  legal reality, and the structural attribution gate*.
+
+## Phase 8: stem separation (the retained sample library)
+
+The `DemucsStemSeparator` separates a track's audio into named stems (`htdemucs_ft` → vocals/drums/
+bass/other; `htdemucs_6s` → + piano/guitar for alt-piano). The `SeparationJobConsumer` orchestrates
+*load → separate → content-hash → retain → persist*: each stem is stored once by SHA-256 content hash
+(the same addressing the Rust object store uses) and recorded with its `separator_model + version`
+provenance. Separation is **idempotent** — a deterministic re-run yields the same hashes, so retention
+de-duplicates and no duplicate rows are written (matching the DB `unique (reference_track_id,
+audio_uri)` constraint). The Rust control plane owns promotion + the attribution-completeness gate;
+this plane only makes the library *exist*.
+
+| Port (`separation_ports.py`) | Real adapter (lazy) | Fake adapter |
+|---|---|---|
+| `StemSeparator` | `DemucsStemSeparator` (demucs + torch + torchaudio; htdemucs_ft / _6s) | `FakeStemSeparator` |
+| `TrackLoader` | `StoreTrackLoader` (reference-uri lookup + object-store `AudioLoader`) | `InMemoryTrackLoader` |
+| `StemBlobStore` | the S3/R2 object store (write-by-content-hash) | `InMemoryStemBlobStore` |
+| `StemRecordStore` | Postgres `stems` writer (the worker is the writer) | `InMemoryStemRecordStore` |
+
+Pure (no torch/I/O): `pure/separation.py` (`content_hash` + `build_stem_records` — content-hashing and
+provenance-stamping). Domain: `domain/separation.py` (`StemType`, `SeparationResult`, `StemRecord` —
+mirrors the Rust `stems.rs`). The `SeparateTrack` job envelope mirrors Rust
+`JobEnvelope::SeparateTrack { reference_track_id }` byte-for-byte; the control plane enqueues it from
+`nameless stems separate <track>`.
 
 ## Phase 7: reference-track context (the non-cloning layer)
 
@@ -76,11 +105,14 @@ heavy paths are **env-gated** below. Nothing here was installed on the build box
 ```bash
 cd workers
 uv sync --extra dev          # installs only pydantic + numpy + pytest
-uv run pytest -q             # 102 tests: Phase 2 (state mirror 480-triple, key-from-chroma, vectors,
+uv run pytest -q             # 115 tests: Phase 2 (state mirror 480-triple, key-from-chroma, vectors,
                              # orchestration, retrieval ranking, persistence, runner) +
-                             # Phase 7 (44: tonal-balance + stereo-width math, the non-melodic
-                             # invariant, vibe summary, genre tagging, vibe describer, analyzer e2e,
-                             # AnalyzeReference job round-trip)
+                             # Phase 7 (tonal-balance + stereo-width math, the non-melodic invariant,
+                             # vibe summary, genre tagging, vibe describer, analyzer e2e,
+                             # AnalyzeReference job round-trip) +
+                             # Phase 8 (13: content-hash + build_stem_records, fake separator naming/
+                             # determinism/6s variant, separation consumer retention + model/version
+                             # provenance + idempotency, SeparateTrack job round-trip)
 ```
 
 (If not using uv: `pip install pydantic numpy pytest` then `PYTHONPATH=src pytest -q`.)
@@ -115,6 +147,16 @@ the Rust `reference upload` enqueues an `AnalyzeReference` job; the analyzer com
 `RestrictedReferenceAnalyzer(embedder=ClapEmbedder(), genre_tagger=ClapZeroShotGenreTagger(embedder),
 vibe_describer=ClaudeVibeDescriber())` and writes the `reference_context` row (after migration
 `0003_reference_tracks.sql`). It computes only non-melodic targets — never f0/chroma.
+
+**Phase 8 — stem separation (env-gated; Demucs is NOT run here).** The real `DemucsStemSeparator`
+needs `demucs` + `torch` + `torchaudio` (GPU wanted; `uv add demucs torch torchaudio`, or
+`audio-separator` for the BS-RoFormer swap). Apply migration `0004_sampling.sql` first. Wiring (built,
+not run): the Rust `nameless stems separate <track>` enqueues a `SeparateTrack { reference_track_id }`
+job; the `SeparationJobConsumer` composes `SeparationJobConsumer(track_loader=StoreTrackLoader(...),
+separator=DemucsStemSeparator("htdemucs_ft"), blob_store=<S3 object store>, record_store=<Postgres
+stems writer>)`, retains every stem by content-hash, and writes the `stems` index rows. Then the Rust
+CLI promotes a stem: `nameless --local sample add <stem> --project <p> --artist "…" --time-range
+12000-18000 --rights copyrighted-uncleared` and renders `nameless --local credits <project>`.
 
 ## Running the worker (the cross-language seam)
 

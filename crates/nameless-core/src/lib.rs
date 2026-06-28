@@ -16,6 +16,7 @@
 //! Concrete adapters (filesystem/in-memory/Postgres/S3) live in `nameless-adapters`; the CLI that
 //! wires them lives in `nameless-cli`.
 
+pub mod attribution;
 pub mod conditioning;
 pub mod error;
 pub mod fragment;
@@ -24,18 +25,26 @@ pub mod ports;
 pub mod provenance;
 pub mod reference;
 pub mod state_machine;
+pub mod stems;
 
 // Flat re-exports of the public surface so downstream crates can `use nameless_core::Fragment`.
+pub use attribution::{
+    credits_sheet, AttributionField, CompleteAttribution, IncompleteAttribution, PartialAttribution,
+    RightsStatus, SampleAttribution,
+};
 pub use conditioning::{
     gather_melodic_conditioning, MelodicConditioning, ReferenceConditioning,
 };
 pub use error::{RepoError, StoreError};
 pub use fragment::{now_ms, Fragment, FragmentId, FragmentKind, Project, ProjectId};
 pub use job::{JobEnvelope, JobError, JobId, JobQueue, JobRecord, JobStatus, RetryPolicy};
-pub use ports::{FragmentRepo, ObjectStore, ReferenceStore};
+pub use ports::{
+    AttributionStore, FragmentRepo, ObjectStore, ReferenceStore, SampleStore, StemStore,
+};
 pub use provenance::Provenance;
 pub use reference::{
     ProjectReference, ReferenceContext, ReferenceContextSummary, ReferenceRole, ReferenceTrack,
     ReferenceTrackId, TonalBalance,
 };
-pub use state_machine::{transition, FragmentState, IllegalTransition, Transition};
+pub use state_machine::{place, transition, FragmentState, IllegalTransition, PlaceError, Transition};
+pub use stems::{Stem, StemId, StemType};

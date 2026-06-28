@@ -6,11 +6,13 @@
 //! JSON object; the human form prints IDs + a one-line summary. This single chokepoint is what
 //! the information-disclosure test (T-01-03) asserts against.
 
+use nameless_core::attribution::{credits_sheet, SampleAttribution};
 use nameless_core::fragment::{Fragment, Project, ProjectId};
 use nameless_core::job::JobId;
 use nameless_core::reference::{
     ReferenceContextSummary, ReferenceRole, ReferenceTrack, ReferenceTrackId,
 };
+use nameless_core::stems::Stem;
 
 /// Truncate a note to a compact preview so list output stays one line per fragment.
 fn preview(note: &str, max: usize) -> String {
@@ -235,6 +237,166 @@ pub fn print_reference_attached(
             project,
             role.as_str()
         );
+    }
+}
+
+// =================================================================================================
+// Stem library + attributed sampling output (Phase 8). Compact by construction: stem/attribution
+// rows print ids + labels + the (short) audio_uri key, never audio bytes. The credits sheet is the
+// one intentionally-larger artifact (it is the deliverable), and it ALWAYS leads with the
+// attribution-≠-permission notice (SAMP-04).
+// =================================================================================================
+
+/// `stems separate` result — confirm the enqueued separation job for a track.
+pub fn print_stems_separate(track: ReferenceTrackId, job: JobId, json: bool) {
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "reference": track.to_string(),
+                "enqueued_job": job.to_string(),
+            })
+        );
+    } else {
+        println!("separating reference {track} (enqueued {job})");
+    }
+}
+
+/// `stems list` — one compact line per stem (id, type, separator, audio_uri), or a JSON array.
+pub fn print_stem_list(stems: &[Stem], json: bool) {
+    if json {
+        let arr: Vec<_> = stems
+            .iter()
+            .map(|s| {
+                serde_json::json!({
+                    "id": s.id.to_string(),
+                    "stem_type": s.stem_type.as_str(),
+                    "separator": format!("{}@{}", s.separator_model, s.separator_version),
+                    "audio_uri": s.audio_uri,
+                    "duration_ms": s.duration_ms,
+                })
+            })
+            .collect();
+        println!("{}", serde_json::Value::Array(arr));
+    } else {
+        for s in stems {
+            println!(
+                "{}  {:<7}  {}@{:<7}  {}",
+                s.id,
+                s.stem_type.as_str(),
+                s.separator_model,
+                s.separator_version,
+                s.audio_uri
+            );
+        }
+    }
+}
+
+/// `sample add` result — the new sampled fragment id, its attribution summary, and the analysis job.
+pub fn print_sample_added(
+    frag: &Fragment,
+    attr: &SampleAttribution,
+    job: JobId,
+    json: bool,
+) {
+    let a = &attr.attribution;
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "fragment": frag.id.to_string(),
+                "provenance": frag.provenance.as_str(),
+                "state": frag.state.as_str(),
+                "source_title": a.source_title,
+                "source_artist": a.source_artist,
+                "stem_type": a.stem_type.as_str(),
+                "start_ms": a.start_ms,
+                "end_ms": a.end_ms,
+                "rights": a.rights_status.as_str(),
+                "enqueued_job": job.to_string(),
+            })
+        );
+    } else {
+        println!(
+            "sampled {} from \"{}\" — {} ({}–{} ms, rights={}) → fragment {} (enqueued {})",
+            a.stem_type.as_str(),
+            a.source_title,
+            a.source_artist,
+            a.start_ms,
+            a.end_ms,
+            a.rights_status.as_str(),
+            frag.id,
+            job
+        );
+    }
+}
+
+/// `sample show` — a sampled fragment's full attribution + rights status, with the honest notice
+/// that **attribution is not permission** (SAMP-04).
+pub fn print_sample_show(attr: &SampleAttribution, json: bool) {
+    let a = &attr.attribution;
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "fragment": attr.fragment_id.to_string(),
+                "project": attr.project_id.to_string(),
+                "source_track": a.source_track_id.to_string(),
+                "stem": a.stem_id.to_string(),
+                "source_title": a.source_title,
+                "source_artist": a.source_artist,
+                "stem_type": a.stem_type.as_str(),
+                "start_ms": a.start_ms,
+                "end_ms": a.end_ms,
+                "rights": a.rights_status.as_str(),
+                "rights_note": a.rights_status.note(),
+                "attribution_is_not_permission": true,
+            })
+        );
+    } else {
+        println!("fragment     {}", attr.fragment_id);
+        println!("project      {}", attr.project_id);
+        println!("source       \"{}\" — {}", a.source_title, a.source_artist);
+        println!("stem         {} ({})", a.stem_type.as_str(), a.stem_id);
+        println!("source_track {}", a.source_track_id);
+        println!("range        {}–{} ms ({} ms)", a.start_ms, a.end_ms, a.duration_ms());
+        println!("rights       {} — {}", a.rights_status.as_str(), a.rights_status.note());
+        println!("note         attribution is NOT permission; clear copyrighted/unknown samples before publishing");
+    }
+}
+
+/// `credits <project>` — the credits sheet (markdown). `--json` wraps the same markdown as a string
+/// alongside the structured rows, so a UI can render either. The markdown ALWAYS leads with the
+/// attribution-≠-permission notice (built into [`credits_sheet`]).
+pub fn print_credits(project_title: &str, rows: &[SampleAttribution], json: bool) {
+    let sheet = credits_sheet(project_title, rows);
+    if json {
+        let samples: Vec<_> = rows
+            .iter()
+            .map(|r| {
+                let a = &r.attribution;
+                serde_json::json!({
+                    "fragment": r.fragment_id.to_string(),
+                    "source_title": a.source_title,
+                    "source_artist": a.source_artist,
+                    "stem_type": a.stem_type.as_str(),
+                    "start_ms": a.start_ms,
+                    "end_ms": a.end_ms,
+                    "rights": a.rights_status.as_str(),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "project": project_title,
+                "attribution_is_not_permission": true,
+                "samples": samples,
+                "markdown": sheet,
+            })
+        );
+    } else {
+        print!("{sheet}");
     }
 }
 

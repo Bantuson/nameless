@@ -19,6 +19,8 @@ pub mod reference_store_file;
 pub mod reference_store_mem;
 pub mod repo_file;
 pub mod repo_mem;
+pub mod sample_store_file;
+pub mod sample_store_mem;
 
 // --- heavy leaf, behind the non-default `postgres` feature ---
 #[cfg(feature = "postgres")]
@@ -29,6 +31,8 @@ pub mod queue_sqlxmq;
 pub mod reference_store_pg;
 #[cfg(feature = "postgres")]
 pub mod repo_pg;
+#[cfg(feature = "postgres")]
+pub mod sample_store_pg;
 
 // Re-export the default (lean) adapter surface.
 pub use object_store_fs::{content_hash, FilesystemObjectStore};
@@ -39,6 +43,8 @@ pub use reference_store_file::FileReferenceStore;
 pub use reference_store_mem::InMemoryReferenceStore;
 pub use repo_file::FileFragmentRepo;
 pub use repo_mem::InMemoryFragmentRepo;
+pub use sample_store_file::FileSampleStore;
+pub use sample_store_mem::InMemorySampleStore;
 
 #[cfg(feature = "postgres")]
 pub use object_store_s3::S3ObjectStore;
@@ -48,3 +54,5 @@ pub use queue_sqlxmq::SqlxmqJobQueue;
 pub use reference_store_pg::PostgresReferenceStore;
 #[cfg(feature = "postgres")]
 pub use repo_pg::PostgresFragmentRepo;
+#[cfg(feature = "postgres")]
+pub use sample_store_pg::PostgresSampleStore;

@@ -185,6 +185,35 @@ impl Fragment {
             created_at_ms: now_ms(),
         }
     }
+
+    /// Promote a library stem into a `sampled` fragment (Phase 8 — SAMP-02).
+    ///
+    /// Provenance is [`Provenance::Sampled`] and state is `Captured`, so it enters the SAME human
+    /// analysis path as a capture (Captured → Analyzing → Analyzed) — sampled material is real source
+    /// audio, never the eval gate. `kind` is [`FragmentKind::Stem`]; `audio_uri` is the stem's
+    /// content-hash (the full stem, or a trimmed slice). The attribution gate
+    /// ([`crate::state_machine::place`]) then blocks placement until a complete attribution exists.
+    pub fn new_sampled(
+        project_id: ProjectId,
+        audio_uri: String,
+        duration_ms: Option<u32>,
+        sample_rate: Option<u32>,
+        note_text: String,
+    ) -> Self {
+        Fragment {
+            id: FragmentId::new(),
+            project_id,
+            kind: FragmentKind::Stem,
+            provenance: Provenance::Sampled,
+            audio_uri,
+            duration_ms,
+            sample_rate,
+            note_text,
+            state: FragmentState::Captured,
+            parent_fragment_id: None,
+            created_at_ms: now_ms(),
+        }
+    }
 }
 
 /// Current Unix time in milliseconds. Clamps pre-epoch clocks to 0 rather than panicking.
@@ -234,6 +263,22 @@ mod tests {
         assert!(json.contains("\"melody\""));
         assert!(json.contains("\"captured\""));
         assert!(json.contains("\"human_recorded\""));
+    }
+
+    #[test]
+    fn new_sampled_is_sampled_stem_captured() {
+        let f = Fragment::new_sampled(
+            ProjectId::new(),
+            "stemhash".into(),
+            Some(6_000),
+            Some(44_100),
+            "sampled vocals from Trust — Brent Faiyaz".into(),
+        );
+        assert_eq!(f.provenance, Provenance::Sampled);
+        assert_eq!(f.kind, FragmentKind::Stem);
+        assert_eq!(f.state, FragmentState::Captured);
+        assert_eq!(f.audio_uri, "stemhash");
+        assert!(f.parent_fragment_id.is_none());
     }
 
     #[test]

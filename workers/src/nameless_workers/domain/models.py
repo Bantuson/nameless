@@ -36,11 +36,25 @@ class FeatureExtractJob(BaseModel):
 
 
 class SeparateJob(BaseModel):
-    """Separate a track/fragment into stems (the Phase-8 sampling job; modelled here for parity)."""
+    """Separate a fragment into stems (a fragment-keyed Phase-8 variant; modelled here for parity)."""
 
     model_config = ConfigDict(frozen=True)
     job: Literal["separate"] = "separate"
     fragment_id: UUID
+
+
+class SeparateTrackJob(BaseModel):
+    """Separate an uploaded reference TRACK into its retained stem library (the Phase-8 job, SAMP-01).
+
+    Mirrors Rust ``JobEnvelope::SeparateTrack`` byte-for-byte:
+    ``{"job": "separate_track", "reference_track_id": "<uuid>"}``. Handled by the
+    ``SeparationJobConsumer`` driving the ``DemucsStemSeparator``. Keyed by the reference track (the
+    same uploaded audio Phase 7 analyzes) — a track is both reference + sample source.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    job: Literal["separate_track"] = "separate_track"
+    reference_track_id: UUID
 
 
 class AnalyzeReferenceJob(BaseModel):
@@ -58,7 +72,7 @@ class AnalyzeReferenceJob(BaseModel):
 
 # The tagged union, discriminated on `job` — the exact shape Rust serializes.
 JobEnvelope = Annotated[
-    Union[FeatureExtractJob, SeparateJob, AnalyzeReferenceJob],
+    Union[FeatureExtractJob, SeparateJob, SeparateTrackJob, AnalyzeReferenceJob],
     Field(discriminator="job"),
 ]
 

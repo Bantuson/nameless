@@ -466,6 +466,94 @@ rather than merely discouraged.
 
 ---
 
+## 11c. Stem separation (Phase 8) — Demucs, attribution-clean sampling, and the structural gate
+
+Phase 8 turns every uploaded track into a **retained, browsable stem library** and lets any stem be
+promoted to an **attributed `sampled` fragment**. The worker plane owns the separation half; the Rust
+control plane owns promotion + the attribution invariant. This section explains the DSP, the model
+choices, and — most importantly — the *honest legal framing* the system bakes in.
+
+### How source separation works (Demucs, at a real level)
+
+A finished mix is a sum of sources (vocals + drums + bass + everything else) collapsed to 2 channels.
+Separation is the **inverse, under-determined** problem: recover the sources from the mixture. Demucs
+(`htdemucs`) is a **hybrid** model — it processes the signal in *both* the waveform domain and the
+spectrogram (STFT) domain in parallel branches of a U-Net with a transformer at the bottleneck, then
+fuses them. Intuition for each piece:
+
+- **U-Net (encoder→bottleneck→decoder with skip connections).** The encoder downsamples to a compact
+  representation that captures *what* sources are present; the decoder upsamples back to full
+  resolution; skip connections re-inject fine detail the encoder discarded, so transients (a hat, a
+  pluck) survive. The network outputs, per source, a signal (waveform branch) or a **mask** applied to
+  the mixture spectrogram (spectrogram branch) — a soft 0..1 gain per time–frequency bin saying "how
+  much of this bin belongs to vocals".
+- **Hybrid waveform + spectrogram.** The spectrogram branch is good at harmonic, tonal content (it
+  *sees* pitch as horizontal lines); the waveform branch is good at transients and phase (which a
+  magnitude spectrogram throws away). Fusing both beats either alone.
+- **Transformer bottleneck.** Cross-attention lets the model use long-range context ("this is the
+  chorus, the vocal is doubled") rather than deciding each frame in isolation.
+
+`htdemucs_ft` is the **fine-tuned** four-stem model (vocals / drums / bass / other) — best overall
+quality, the default. `htdemucs_6s` adds **piano + guitar** stems — directly useful for the project's
+alt-piano focus — but its piano stem has known artifacts, so it is opt-in. Demucs is **maintenance-only**
+(creator left Meta); we keep it behind the `StemSeparator` port so the SOTA **BS-RoFormer** (via
+`audio-separator`) is a config swap, not a rewrite (STACK.md §4).
+
+**Known artifacts (handle, don't trust blindly — PITFALLS.md).** Per-stem auto-rescale breaks *relative*
+stem levels; hi-hat/cymbal bleed leaks into vocals; vocal reverb is often left in "other"; dense mixes
+separate worse. We re-encode each stem at the model's native sample rate and **do not** re-normalize
+across stems, so relative levels are preserved for a faithful sample.
+
+### Retention is content-addressed (and that is what makes it idempotent)
+
+Each stem's bytes are hashed (SHA-256 → the `audio_uri`) and stored once, write-if-absent — the same
+content-addressing the Rust object store uses, so a stem the Python worker retains is readable by the
+control plane with no format negotiation. Because a deterministic separator is a *pure function* of
+(track audio, model), re-separating a track yields **identical bytes → identical hash → the same key
+and the same DB row**. Retention de-duplicates for free; the DB carries a `unique (reference_track_id,
+audio_uri)` constraint so a redelivered or repeated separation job is a no-op rather than a duplicated
+library. Every stem records `separator_model` + `separator_version` so a re-separation under a better
+model lands under a different key (both kept, distinguishable) and the credits sheet is honest about
+*how* a sample was isolated.
+
+### Attribution-clean sampling vs. copy-and-claim-original — and the honest legal reality
+
+The project's stance is **attribution-clean sampling**: a sample is literal copied audio, so its source
+is tracked and credited rather than laundered into "original" material. But credit is not a license, and
+the system says so, in-context:
+
+- **Sampling a copyrighted recording is infringement regardless of personal or portfolio intent.** In
+  key precedent there is *no de-minimis safe harbor* for sound-recording sampling (US *Bridgeport*), and
+  a portfolio is **published**, not private use. "It's just a portfolio" is not a defense.
+- **Attribution ≠ permission.** A credits sheet is honest and good practice; it does **not** confer the
+  right to use the sample. The `credits` output and `sample show` both state this explicitly, and
+  `rights_status` ∈ {`copyrighted_uncleared`, `royalty_free`, `own_work`, `unknown`} is a first-class
+  field from day one — cheap to record now, a forensic nightmare to reconstruct later (PITFALLS.md
+  Pitfall 7). Prefer royalty-free / own material for anything that ships publicly.
+
+### The attribution-completeness invariant is structural (SAMP-03) — the integrity boundary
+
+This is the headline, and it mirrors the eval gate: *the harness gates; the agent explores.* The Rust
+control plane makes **incomplete-attribution placement unrepresentable**:
+
+- A `PartialAttribution` (every field `Option`) is what the CLI gathers from the resolved stem + the
+  `--artist` / `--time-range` / `--rights` / `--title` flags. A `CompleteAttribution` has **every field
+  non-`Option`** — it *cannot represent* a missing field. The only path from user input to a
+  `CompleteAttribution` is `PartialAttribution::into_complete()`, which validates and lists exactly what
+  is missing (a whitespace-only artist counts as missing; an inverted time range counts as missing).
+- The sampled-placement gate (`state_machine::place`) requires a `&CompleteAttribution`, and
+  `Fragment::apply(Place)` is **refused** for `sampled` provenance — so there is no ungated path that
+  writes `Placed` onto a sample. With partial attribution a sample *cannot be placed*; with complete
+  attribution it can; the bypass does not exist because it cannot be spelled. (Rust tests prove all
+  three.) `sampled` still travels the human lifecycle — never the AI eval gate — because a sample *is*
+  source audio; the attribution gate is layered specifically on its `Analyzed → Placed` edge.
+
+The Python worker's job is to make the library *exist* (separate + retain, with provenance); the Rust
+control plane's job is to make sure nothing from it reaches an arrangement uncredited. Two languages,
+one guarantee.
+
+---
+
 ## 12. References
 
 - **CREPE:** Kim, Salamon, Li, Bello, "CREPE: A Convolutional Representation for Pitch Estimation",
@@ -488,3 +576,12 @@ rather than merely discouraged.
   (M/S) stereo decomposition for width — standard mastering DSP (`numpy`/`soundfile`, no extra lib).
 - **Non-cloning as a typed boundary:** `.planning/research/ARCHITECTURE.md` Pattern 2 (reference as
   conditioning, not a fragment) + `PITFALLS.md` Pitfall 6 (clone-boundary leak — type the asymmetry).
+- **Source separation (Demucs):** Défossez, "Hybrid Spectrogram and Waveform Source Separation" (MDX
+  2021) and Rouard, Massa, Défossez, "Hybrid Transformers for Music Source Separation" (`htdemucs`,
+  ICASSP 2023). BS-RoFormer (the SOTA swap path) via `nomadkaraoke/python-audio-separator`.
+- **Sampling copyright reality:** *Bridgeport Music v. Dimension Films* (no de-minimis safe harbor for
+  sound-recording sampling); `.planning/research/PITFALLS.md` Pitfall 7 — attribution ≠ permission; a
+  portfolio is published, not private use.
+- **Attribution-completeness as a typed gate:** `.planning/research/ARCHITECTURE.md` Pattern 3 (sampled
+  on the human path + the attribution invariant) — mirrored in `crates/nameless-core/src/attribution.rs`
+  (`Partial` vs `Complete`) + `state_machine.rs::place` (the no-bypass placement gate).

@@ -32,6 +32,9 @@ from .genre_tagger import ClapZeroShotGenreTagger, FakeGenreTagger
 from .job_source_mem import InMemoryJobSource
 from .reference_analyzer_fake import FakeReferenceAnalyzer
 from .repo_mem import InMemoryFragmentRepo
+from .stem_separator_fake import FakeStemSeparator
+from .stem_store_mem import InMemoryStemBlobStore, InMemoryStemRecordStore
+from .track_loader_fake import InMemoryTrackLoader
 from .vibe_describer_fake import FakeVibeDescriber
 
 __all__ = [
@@ -45,4 +48,9 @@ __all__ = [
     "FakeVibeDescriber",
     "FakeGenreTagger",
     "ClapZeroShotGenreTagger",
+    # Phase 8 separation fakes
+    "FakeStemSeparator",
+    "InMemoryStemBlobStore",
+    "InMemoryStemRecordStore",
+    "InMemoryTrackLoader",
 ]

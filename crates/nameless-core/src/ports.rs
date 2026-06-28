@@ -14,11 +14,13 @@
 //! build. This keeps one port shape for both worlds at the cost of a thin blocking shim in the
 //! heavy adapters (documented there).
 
+use crate::attribution::SampleAttribution;
 use crate::error::{RepoError, StoreError};
 use crate::fragment::{Fragment, FragmentId, Project, ProjectId};
 use crate::reference::{
     ProjectReference, ReferenceContextSummary, ReferenceRole, ReferenceTrack, ReferenceTrackId,
 };
+use crate::stems::{Stem, StemId};
 
 /// Immutable, content-addressed blob storage (raw audio, later rendered audio + stems).
 ///
@@ -101,3 +103,52 @@ pub trait ReferenceStore {
         project: ProjectId,
     ) -> Result<Vec<ProjectReference>, RepoError>;
 }
+
+/// Persistence for the retained stem library (Phase 8 — SAMP-01).
+///
+/// The Python `DemucsStemSeparator` WRITES these rows (mirroring how the feature worker writes
+/// `fragment_features`); the control plane READS them for `stems list` and resolves a stem to its
+/// `audio_uri` when promoting it to a `sampled` fragment. The stem audio itself lives in the
+/// [`ObjectStore`] by content-hash, retained indefinitely — only the index lives here.
+///
+/// Implementors: `InMemorySampleStore` (tests), `FileSampleStore` (the `--local` JSON store),
+/// `PostgresSampleStore` (prod, behind the `postgres` feature).
+pub trait StemStore {
+    /// Insert a stem index row (idempotent on `id`; the audio is already in the object store).
+    fn insert_stem(&self, stem: &Stem) -> Result<(), RepoError>;
+
+    /// Fetch a single stem by id, or `Ok(None)` if absent.
+    fn get_stem(&self, id: StemId) -> Result<Option<Stem>, RepoError>;
+
+    /// List the stems separated from one uploaded track (browsable; newest-first encouraged).
+    fn list_stems(&self, track: ReferenceTrackId) -> Result<Vec<Stem>, RepoError>;
+}
+
+/// Persistence for sample attributions (Phase 8 — SAMP-03/SAMP-05).
+///
+/// A row exists iff a fragment has `provenance = sampled`. Because a [`SampleAttribution`] is built
+/// only from a [`crate::attribution::CompleteAttribution`], every persisted attribution is complete
+/// by construction — the credits exporter ([`crate::attribution::credits_sheet`]) just reads them.
+pub trait AttributionStore {
+    /// Insert a (complete) sample attribution for a sampled fragment.
+    fn insert_attribution(&self, attribution: &SampleAttribution) -> Result<(), RepoError>;
+
+    /// Fetch the attribution for a sampled fragment, or `Ok(None)` if it has none.
+    fn get_attribution(&self, fragment: FragmentId) -> Result<Option<SampleAttribution>, RepoError>;
+
+    /// List every sample attribution in a project (drives `credits <project>`).
+    fn list_project_attributions(
+        &self,
+        project: ProjectId,
+    ) -> Result<Vec<SampleAttribution>, RepoError>;
+}
+
+/// A combined stem + attribution store — one object that satisfies both Phase-8 ports.
+///
+/// The local/file and Postgres adapters back stems and attributions with the same store (one JSON
+/// file / one database), so this supertrait lets the CLI hold a single `Box<dyn SampleStore>` and
+/// call either port's methods through it. The blanket impl means any type implementing both halves
+/// is automatically a `SampleStore` — no per-adapter boilerplate.
+pub trait SampleStore: StemStore + AttributionStore {}
+
+impl<T: StemStore + AttributionStore> SampleStore for T {}

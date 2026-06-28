@@ -27,6 +27,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::attribution::CompleteAttribution;
 use crate::fragment::Fragment;
 use crate::provenance::Provenance;
 
@@ -205,14 +206,82 @@ pub fn transition(
     Ok(next)
 }
 
+/// A rejected placement attempt — either an illegal lifecycle edge OR missing sample attribution.
+///
+/// The attribution variant is the Phase-8 layer ON the placement edge: it is to sampling what
+/// `EvalNotPassed` is to generation — *the harness gates; the agent explores*. Returned (never
+/// panicked) so the incomplete-attribution case is unignorable.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum PlaceError {
+    /// The lifecycle does not permit `Place` from the current `(provenance, state)` — e.g. an
+    /// unanalyzed fragment, or an ungated AI generation. Carries the underlying illegal edge.
+    #[error(transparent)]
+    Illegal(#[from] IllegalTransition),
+
+    /// A `sampled` fragment may not be placed without a complete attribution (SAMP-03). There is no
+    /// bypass: the gate demands a [`CompleteAttribution`], which cannot represent a missing field.
+    #[error("attribution required: a sampled fragment cannot be placed without complete attribution")]
+    AttributionRequired,
+}
+
+/// The placement gate — `Place`, with the Phase-8 attribution invariant layered on for samples.
+///
+/// Pure: output depends only on the inputs. It first asks the lifecycle whether `Place` is even
+/// legal here (via [`transition`]); then, **only for `Sampled` provenance**, it additionally
+/// requires a `&CompleteAttribution`. The attribution argument is `Option` because human / AI /
+/// derived placements need none — but the gate *itself* decides whether one is required from the
+/// provenance, so passing `None` for a sample is a hard [`PlaceError::AttributionRequired`], not a
+/// silent pass. The `CompleteAttribution` type makes "present but incomplete" impossible to express,
+/// so a sample reaches an arrangement only fully credited (mirrors the eval gate for AI material).
+pub fn place(
+    provenance: Provenance,
+    from: FragmentState,
+    attribution: Option<&CompleteAttribution>,
+) -> Result<FragmentState, PlaceError> {
+    // Base legality: this also enforces "only from Analyzed (human/sampled/derived) or Promoted (ai)".
+    let next = transition(provenance, from, Transition::Place)?;
+    // The attribution layer applies to sampled material only — and it is the gate, not the caller,
+    // that requires it (so a caller cannot opt out by passing None).
+    if provenance == Provenance::Sampled && attribution.is_none() {
+        return Err(PlaceError::AttributionRequired);
+    }
+    Ok(next)
+}
+
 impl Fragment {
-    /// The ONLY way to mutate a fragment's lifecycle state.
+    /// The ONLY way to mutate a fragment's lifecycle state for the non-placement verbs (and for
+    /// non-sampled placement). Delegates to [`transition`] and assigns the result on success.
     ///
-    /// Delegates to [`transition`] and assigns the result on success. There is no other code path
-    /// that writes `Fragment::state` (grep-gated by `test_apply_is_sole_mutation_path` and the
-    /// crate convention), so the invariant proven for `transition` holds for every live fragment.
+    /// **Sampled placement is deliberately refused here.** A `sampled` fragment's `Place` edge
+    /// carries an extra precondition — complete attribution — that `apply` cannot supply, so `apply`
+    /// returns [`IllegalTransition`] for `(Sampled, Place)` and the ONLY way to place a sample is
+    /// [`Fragment::place`] with a [`CompleteAttribution`]. This closes the would-be bypass: there is
+    /// no ungated path that writes `Placed` onto a sample. (For human / ai / derived material `apply`
+    /// keeps driving `Place` exactly as before — they have no attribution precondition.)
     pub fn apply(&mut self, t: Transition) -> Result<(), IllegalTransition> {
+        if self.provenance == Provenance::Sampled && t == Transition::Place {
+            return Err(IllegalTransition {
+                from: self.state,
+                transition: t,
+            });
+        }
         let next = transition(self.provenance, self.state, t)?;
+        self.state = next;
+        Ok(())
+    }
+
+    /// Place a fragment, enforcing the sampled-attribution gate (SAMP-03).
+    ///
+    /// This is the attribution-aware placement chokepoint. For a `sampled` fragment it REQUIRES a
+    /// `Some(&CompleteAttribution)`; for any other provenance the argument is ignored (pass `None`).
+    /// A driver that places a sample loads its [`crate::attribution::SampleAttribution`] row and
+    /// passes `Some(&row.attribution)` — and since that row can only exist as a complete value, the
+    /// gate is satisfiable exactly when (and only when) the sample is fully credited.
+    pub fn place(
+        &mut self,
+        attribution: Option<&CompleteAttribution>,
+    ) -> Result<(), PlaceError> {
+        let next = place(self.provenance, self.state, attribution)?;
         self.state = next;
         Ok(())
     }
@@ -341,6 +410,115 @@ mod tests {
         assert_eq!(err.transition, Place);
         assert!(err.to_string().contains("Place"));
         assert!(err.to_string().contains("Captured"));
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Phase 8: the sampled-placement attribution gate (SAMP-03). These layer ON TOP of the bare
+    // `transition` matrix above — which still legally allows (Sampled, Analyzed, Place) at the
+    // lifecycle level. The GATE is what additionally demands complete attribution.
+    // ----------------------------------------------------------------------------------------
+
+    use crate::attribution::{CompleteAttribution, PartialAttribution, RightsStatus};
+    use crate::reference::ReferenceTrackId;
+    use crate::stems::{StemId, StemType};
+
+    fn complete_attr() -> CompleteAttribution {
+        PartialAttribution {
+            source_track_id: Some(ReferenceTrackId::new()),
+            stem_id: Some(StemId::new()),
+            source_title: Some("Trust".into()),
+            source_artist: Some("Brent Faiyaz".into()),
+            stem_type: Some(StemType::Vocals),
+            start_ms: Some(12_000),
+            end_ms: Some(18_000),
+            rights_status: Some(RightsStatus::CopyrightedUncleared),
+        }
+        .into_complete()
+        .unwrap()
+    }
+
+    /// A sampled fragment with NO (partial) attribution cannot be placed; WITH complete it can.
+    #[test]
+    fn test_sampled_place_requires_complete_attribution() {
+        // No attribution → hard block.
+        assert_eq!(
+            place(Sampled, Analyzed, None),
+            Err(PlaceError::AttributionRequired)
+        );
+        // Complete attribution → allowed (and still only from Analyzed, per the base lifecycle).
+        let attr = complete_attr();
+        assert_eq!(place(Sampled, Analyzed, Some(&attr)), Ok(Placed));
+        // Even WITH attribution, an unanalyzed sample is still illegal at the lifecycle level.
+        assert!(matches!(
+            place(Sampled, Captured, Some(&attr)),
+            Err(PlaceError::Illegal(_))
+        ));
+    }
+
+    /// Non-sampled provenances ignore attribution and place via the gate with `None`.
+    #[test]
+    fn test_non_sampled_place_ignores_attribution() {
+        assert_eq!(place(HumanRecorded, Analyzed, None), Ok(Placed));
+        assert_eq!(place(Derived, Analyzed, None), Ok(Placed));
+        // AI still must come through the eval gate (Promoted), attribution irrelevant.
+        assert_eq!(place(AiGenerated, Promoted, None), Ok(Placed));
+        assert!(matches!(
+            place(AiGenerated, Generated, None),
+            Err(PlaceError::Illegal(_))
+        ));
+    }
+
+    /// THE NO-BYPASS PROOF: there is no path that places a sample without complete attribution.
+    /// `apply(Place)` — the otherwise-universal placement verb — refuses a sampled fragment outright,
+    /// so the only door is `place(Some(&complete))`.
+    #[test]
+    fn test_no_bypass_for_sampled_placement() {
+        use crate::fragment::{Fragment, FragmentKind, ProjectId};
+        let mut f = Fragment::new_capture(
+            ProjectId::new(),
+            FragmentKind::Stem,
+            "stemhash".into(),
+            None,
+            None,
+            "sampled vocal chop".into(),
+        );
+        f.provenance = Provenance::Sampled;
+        // Walk the human path to Analyzed using apply (analysis verbs are unaffected).
+        f.apply(Analyze).unwrap();
+        f.apply(MarkAnalyzed).unwrap();
+        assert_eq!(f.state, Analyzed);
+
+        // BYPASS ATTEMPT 1: apply(Place) on a sample — refused, state unchanged.
+        assert!(f.apply(Place).is_err());
+        assert_eq!(f.state, Analyzed);
+
+        // BYPASS ATTEMPT 2: place() without attribution — refused, state unchanged.
+        assert_eq!(f.place(None), Err(PlaceError::AttributionRequired));
+        assert_eq!(f.state, Analyzed);
+
+        // THE ONLY DOOR: place() with complete attribution — succeeds.
+        let attr = complete_attr();
+        f.place(Some(&attr)).unwrap();
+        assert_eq!(f.state, Placed);
+    }
+
+    /// A non-sampled fragment can still place via BOTH apply and the gate (no regression).
+    #[test]
+    fn test_human_place_unaffected_by_gate() {
+        use crate::fragment::{Fragment, FragmentKind, ProjectId};
+        let mut f = Fragment::new_capture(
+            ProjectId::new(),
+            FragmentKind::Hook,
+            "h".into(),
+            None,
+            None,
+            "hook".into(),
+        );
+        f.apply(Analyze).unwrap();
+        f.apply(MarkAnalyzed).unwrap();
+        // apply(Place) still works for human material.
+        f.apply(Place).unwrap();
+        assert_eq!(f.state, Placed);
     }
 
     /// `Fragment::apply` is the single mutation chokepoint and refuses illegal moves.

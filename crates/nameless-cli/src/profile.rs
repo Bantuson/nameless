@@ -12,10 +12,10 @@
 
 use std::path::PathBuf;
 
-use nameless_core::ports::{FragmentRepo, JobQueue, ObjectStore, ReferenceStore};
+use nameless_core::ports::{FragmentRepo, JobQueue, ObjectStore, ReferenceStore, SampleStore};
 
 use nameless_adapters::{
-    FileFragmentRepo, FileReferenceStore, FilesystemObjectStore, InMemoryJobQueue,
+    FileFragmentRepo, FileReferenceStore, FileSampleStore, FilesystemObjectStore, InMemoryJobQueue,
 };
 
 use crate::error::CliError;
@@ -27,6 +27,8 @@ pub struct Plane {
     pub queue: Box<dyn JobQueue>,
     /// Reference-track persistence (Phase 7) — uploads, context summaries, project links.
     pub references: Box<dyn ReferenceStore>,
+    /// Stem library + sample attribution persistence (Phase 8) — one store, both ports.
+    pub samples: Box<dyn SampleStore>,
 }
 
 /// Default bounded capacity for the `--local` in-memory queue.
@@ -58,11 +60,14 @@ fn local_plane() -> Plane {
     // File-backed reference store so `reference upload` then `reference show` survive across
     // separate `--local` process invocations (same JSON-file durability as the fragment repo).
     let references = FileReferenceStore::new(root.join("references.json"));
+    // File-backed stem + attribution store (Phase 8), same durability story.
+    let samples = FileSampleStore::new(root.join("samples.json"));
     Plane {
         store: Box::new(store),
         repo: Box::new(repo),
         queue: Box::new(queue),
         references: Box::new(references),
+        samples: Box::new(samples),
     }
 }
 
@@ -70,7 +75,8 @@ fn local_plane() -> Plane {
 #[cfg(feature = "postgres")]
 fn server_plane() -> Result<Plane, CliError> {
     use nameless_adapters::{
-        PostgresFragmentRepo, PostgresReferenceStore, S3ObjectStore, SqlxmqJobQueue,
+        PostgresFragmentRepo, PostgresReferenceStore, PostgresSampleStore, S3ObjectStore,
+        SqlxmqJobQueue,
     };
 
     let database_url = std::env::var("DATABASE_URL")
@@ -84,12 +90,15 @@ fn server_plane() -> Result<Plane, CliError> {
         .map_err(|e| CliError::Config(format!("connect S3/R2 store: {e}")))?;
     let references = PostgresReferenceStore::connect(&database_url)
         .map_err(|e| CliError::Config(format!("connect Postgres reference store: {e}")))?;
+    let samples = PostgresSampleStore::connect(&database_url)
+        .map_err(|e| CliError::Config(format!("connect Postgres sample store: {e}")))?;
 
     Ok(Plane {
         store: Box::new(store),
         repo: Box::new(repo),
         queue: Box::new(queue),
         references: Box::new(references),
+        samples: Box::new(samples),
     })
 }
 

@@ -11,9 +11,13 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use uuid::Uuid;
 
+use nameless_core::attribution::{
+    PartialAttribution, RightsStatus, SampleAttribution,
+};
 use nameless_core::fragment::{Fragment, FragmentId, FragmentKind, Project, ProjectId};
 use nameless_core::job::{JobEnvelope, JobId};
 use nameless_core::reference::{ReferenceRole, ReferenceTrack, ReferenceTrackId};
+use nameless_core::stems::{Stem, StemId};
 use nameless_adapters::{content_hash, probe};
 
 use crate::error::CliError;
@@ -55,6 +59,23 @@ pub enum Command {
     Reference {
         #[command(subcommand)]
         action: ReferenceAction,
+    },
+    /// Stem library: separate an uploaded track into retained stems and browse them (Phase 8).
+    Stems {
+        #[command(subcommand)]
+        action: StemsAction,
+    },
+    /// Attributed sampling: promote a stem to a `sampled` fragment with complete attribution,
+    /// or show a sample's attribution + rights status (attribution is NOT permission).
+    Sample {
+        #[command(subcommand)]
+        action: SampleAction,
+    },
+    /// Generate a project's credits sheet from its sample attributions (SAMP-05).
+    Credits {
+        /// The project UUID to render credits for.
+        #[arg(value_parser = parse_project_id)]
+        project: ProjectId,
     },
 }
 
@@ -134,6 +155,77 @@ pub struct ReferenceUploadArgs {
     pub artist: Option<String>,
 }
 
+#[derive(Debug, Subcommand)]
+pub enum StemsAction {
+    /// Separate an uploaded reference track into its retained stem library (enqueues a Demucs job
+    /// for the Python worker). Any uploaded track can be separated, any time (SAMP-01).
+    Separate {
+        #[arg(value_parser = parse_reference_id)]
+        track: ReferenceTrackId,
+    },
+    /// List the retained stems of an uploaded track (browsable indefinitely).
+    List {
+        #[arg(value_parser = parse_reference_id)]
+        track: ReferenceTrackId,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SampleAction {
+    /// Promote a library stem to a `sampled` fragment with COMPLETE attribution (SAMP-02/03).
+    /// Validation is a hard gate: a missing artist / time-range / rights / title is rejected with
+    /// the exact list of what is missing — an incompletely-attributed sample cannot be created.
+    Add(SampleAddArgs),
+    /// Show a sampled fragment's attribution + rights status (states attribution ≠ permission).
+    Show {
+        #[arg(value_parser = parse_fragment_id)]
+        fragment: FragmentId,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct SampleAddArgs {
+    /// The stem UUID to promote (from `stems list <track>`).
+    #[arg(value_parser = parse_stem_id)]
+    pub stem: StemId,
+    /// The project to add the sampled fragment to.
+    #[arg(long, value_parser = parse_project_id)]
+    pub project: ProjectId,
+    /// The source artist (required for a complete credit).
+    #[arg(long)]
+    pub artist: String,
+    /// The slice used, in milliseconds: `START-END` (e.g. `12000-18000`). `END` must exceed `START`.
+    #[arg(long, value_parser = parse_time_range)]
+    pub time_range: (u32, u32),
+    /// The rights/clearance status of the source (attribution is NOT permission).
+    #[arg(long, value_enum)]
+    pub rights: RightsArg,
+    /// The source title. Defaults to the uploaded track's title if it has one.
+    #[arg(long)]
+    pub title: Option<String>,
+}
+
+/// clap value-enum mirror of [`RightsStatus`] for `--rights`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+#[clap(rename_all = "kebab-case")]
+pub enum RightsArg {
+    CopyrightedUncleared,
+    RoyaltyFree,
+    OwnWork,
+    Unknown,
+}
+
+impl From<RightsArg> for RightsStatus {
+    fn from(r: RightsArg) -> Self {
+        match r {
+            RightsArg::CopyrightedUncleared => RightsStatus::CopyrightedUncleared,
+            RightsArg::RoyaltyFree => RightsStatus::RoyaltyFree,
+            RightsArg::OwnWork => RightsStatus::OwnWork,
+            RightsArg::Unknown => RightsStatus::Unknown,
+        }
+    }
+}
+
 /// clap value-enum mirror of [`ReferenceRole`] for `--role` (accepts `vibe` / `sonic-target`).
 #[derive(Debug, Clone, Copy, ValueEnum)]
 #[clap(rename_all = "kebab-case")]
@@ -200,6 +292,31 @@ fn parse_reference_id(s: &str) -> Result<ReferenceTrackId, String> {
         .map_err(|_| format!("invalid reference UUID: {s:?}"))
 }
 
+fn parse_stem_id(s: &str) -> Result<StemId, String> {
+    Uuid::parse_str(s)
+        .map(StemId)
+        .map_err(|_| format!("invalid stem UUID: {s:?}"))
+}
+
+/// Parse `--time-range START-END` (milliseconds) into `(start, end)` with `end > start`.
+fn parse_time_range(s: &str) -> Result<(u32, u32), String> {
+    let (start, end) = s
+        .split_once('-')
+        .ok_or_else(|| format!("time range must be START-END in ms, got {s:?}"))?;
+    let start: u32 = start
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid start ms: {start:?}"))?;
+    let end: u32 = end
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid end ms: {end:?}"))?;
+    if end <= start {
+        return Err(format!("end ({end}) must exceed start ({start})"));
+    }
+    Ok((start, end))
+}
+
 /// Top-level dispatch. Builds the [`Plane`] from flags then runs the subcommand.
 pub fn run(cli: Cli) -> Result<(), CliError> {
     let plane = build_plane(cli.local)?;
@@ -259,7 +376,129 @@ pub fn run(cli: Cli) -> Result<(), CliError> {
                 Ok(())
             }
         },
+        Command::Stems { action } => match action {
+            StemsAction::Separate { track } => {
+                let job = do_stems_separate(&plane, track)?;
+                output::print_stems_separate(track, job, cli.json);
+                Ok(())
+            }
+            StemsAction::List { track } => {
+                let stems = plane.samples.list_stems(track)?;
+                output::print_stem_list(&stems, cli.json);
+                Ok(())
+            }
+        },
+        Command::Sample { action } => match action {
+            SampleAction::Add(args) => {
+                let (frag, attr, job) = do_sample_add(&plane, &args)?;
+                output::print_sample_added(&frag, &attr, job, cli.json);
+                Ok(())
+            }
+            SampleAction::Show { fragment } => {
+                let attr = plane
+                    .samples
+                    .get_attribution(fragment)?
+                    .ok_or_else(|| CliError::NotFound(format!("sample attribution for fragment {fragment}")))?;
+                output::print_sample_show(&attr, cli.json);
+                Ok(())
+            }
+        },
+        Command::Credits { project } => {
+            let rows = plane.samples.list_project_attributions(project)?;
+            // The credits header labels the project by id (the FragmentRepo port carries no title
+            // lookup; the id is the stable, compact identifier the rest of the CLI prints anyway).
+            output::print_credits(&project.to_string(), &rows, cli.json);
+            Ok(())
+        }
     }
+}
+
+/// Enqueue stem separation for an uploaded reference track. Fails clearly if the track does not
+/// exist. The Python `DemucsStemSeparator` consumes the job, retains every stem by content-hash, and
+/// writes the `stems` index rows (SAMP-01).
+pub fn do_stems_separate(plane: &Plane, track: ReferenceTrackId) -> Result<JobId, CliError> {
+    if plane.references.get_track(track)?.is_none() {
+        return Err(CliError::NotFound(format!("reference {track}")));
+    }
+    let job = plane.queue.enqueue(JobEnvelope::SeparateTrack {
+        reference_track_id: track,
+    })?;
+    Ok(job)
+}
+
+/// Promote a library stem to a `sampled` fragment with COMPLETE attribution (SAMP-02/03).
+///
+/// The attribution-completeness invariant is enforced HERE, before anything is created: a
+/// [`PartialAttribution`] is assembled from the resolved stem + the CLI flags, then validated with
+/// [`PartialAttribution::into_complete`]. If anything is missing (e.g. no title and the source track
+/// has none either), it returns [`CliError::IncompleteAttribution`] naming the missing fields and
+/// **no fragment, attribution, or job is created** — incomplete-attribution promotion is impossible.
+///
+/// On success it: creates the `sampled` fragment (provenance `Sampled`, state `Captured`, audio =
+/// the stem's content-hash), persists the complete attribution, and enqueues a `FeatureExtract` job
+/// so the sample travels the human analysis path (Captured → Analyzing → Analyzed) like any capture.
+/// The attribution then satisfies the placement gate when the fragment is later placed.
+pub fn do_sample_add(
+    plane: &Plane,
+    args: &SampleAddArgs,
+) -> Result<(Fragment, SampleAttribution, JobId), CliError> {
+    // Resolve the stem (its reference_track_id + stem_type feed the attribution).
+    let stem: Stem = plane
+        .samples
+        .get_stem(args.stem)?
+        .ok_or_else(|| CliError::NotFound(format!("stem {}", args.stem)))?;
+
+    // Title falls back to the uploaded track's title when not supplied on the CLI.
+    let track = plane.references.get_track(stem.reference_track_id)?;
+    let source_title = args
+        .title
+        .clone()
+        .or_else(|| track.and_then(|t| t.title));
+
+    let (start_ms, end_ms) = args.time_range;
+
+    let partial = PartialAttribution {
+        source_track_id: Some(stem.reference_track_id),
+        stem_id: Some(stem.id),
+        source_title,
+        source_artist: Some(args.artist.clone()),
+        stem_type: Some(stem.stem_type),
+        start_ms: Some(start_ms),
+        end_ms: Some(end_ms),
+        rights_status: Some(args.rights.into()),
+    };
+
+    // THE HARD GATE: validate completeness BEFORE creating anything (SAMP-03).
+    let complete = partial
+        .into_complete()
+        .map_err(|e| CliError::IncompleteAttribution(e.to_string()))?;
+
+    // Create the sampled fragment (audio = the stem; range recorded in the attribution).
+    let note = format!(
+        "sampled {} from {} — {}",
+        complete.stem_type.as_str(),
+        complete.source_title,
+        complete.source_artist
+    );
+    let frag = Fragment::new_sampled(
+        args.project,
+        stem.audio_uri.clone(),
+        Some(end_ms.saturating_sub(start_ms)),
+        stem.sample_rate,
+        note,
+    );
+    plane.repo.insert_fragment(&frag)?;
+
+    // Persist the complete attribution bound to this fragment + project.
+    let attribution = SampleAttribution::new(frag.id, args.project, complete);
+    plane.samples.insert_attribution(&attribution)?;
+
+    // The sample travels the human analysis path — enqueue feature extraction (like capture).
+    let job = plane.queue.enqueue(JobEnvelope::FeatureExtract {
+        fragment_id: frag.id,
+    })?;
+
+    Ok((frag, attribution, job))
 }
 
 /// The reference-upload core, factored out so it can be unit-tested with injected in-memory
@@ -343,9 +582,11 @@ pub fn do_capture(plane: &Plane, args: &CaptureArgs) -> Result<(Fragment, JobId)
 mod tests {
     use super::*;
     use nameless_core::job::{JobQueue, JobStatus};
-    use nameless_core::ports::{FragmentRepo, ReferenceStore};
+    use nameless_core::ports::{AttributionStore, FragmentRepo, ReferenceStore, StemStore};
+    use nameless_core::stems::StemType;
     use nameless_adapters::{
         InMemoryFragmentRepo, InMemoryJobQueue, InMemoryObjectStore, InMemoryReferenceStore,
+        InMemorySampleStore,
     };
     use std::io::Write;
 
@@ -417,6 +658,7 @@ mod tests {
             repo: Box::new(InMemoryFragmentRepo::new()),
             queue: Box::new(InMemoryJobQueue::new(16)),
             references: Box::new(InMemoryReferenceStore::new()),
+            samples: Box::new(InMemorySampleStore::new()),
         }
     }
 
@@ -572,5 +814,177 @@ mod tests {
         assert_eq!(links[0].role, ReferenceRole::SonicTarget);
 
         let _ = fs::remove_file(&path);
+    }
+
+    // ---- Phase 8: stems / sample / credits ----
+
+    #[test]
+    fn time_range_parses_and_rejects_inverted() {
+        assert_eq!(parse_time_range("12000-18000").unwrap(), (12_000, 18_000));
+        assert!(parse_time_range("18000-12000").is_err()); // end <= start
+        assert!(parse_time_range("12000").is_err()); // no dash
+        assert!(parse_time_range("a-b").is_err());
+    }
+
+    #[test]
+    fn sample_add_parses_required_flags_and_rights_kebab() {
+        let stem = valid_uuid();
+        let project = valid_uuid();
+        assert!(Cli::try_parse_from([
+            "nameless", "sample", "add", &stem, "--project", &project, "--artist", "Brent Faiyaz",
+            "--time-range", "12000-18000", "--rights", "copyrighted-uncleared",
+        ])
+        .is_ok());
+        // --rights and --artist and --time-range are required.
+        assert!(Cli::try_parse_from(["nameless", "sample", "add", &stem, "--project", &project]).is_err());
+    }
+
+    #[test]
+    fn stems_separate_enqueues_for_an_existing_track() {
+        let plane = in_memory_plane();
+        let track = ReferenceTrack::new_upload("trackhash".into(), Some("Trust".into()), None, None, None);
+        plane.references.insert_track(&track).unwrap();
+
+        let job = do_stems_separate(&plane, track.id).unwrap();
+        let rec = plane.queue.consume().unwrap().expect("one job enqueued");
+        assert_eq!(rec.id, job);
+        match rec.envelope {
+            JobEnvelope::SeparateTrack { reference_track_id } => assert_eq!(reference_track_id, track.id),
+            other => panic!("expected SeparateTrack, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stems_separate_unknown_track_is_not_found() {
+        let plane = in_memory_plane();
+        assert!(matches!(
+            do_stems_separate(&plane, ReferenceTrackId::new()),
+            Err(CliError::NotFound(_))
+        ));
+    }
+
+    /// Seed a stem in the store the way the separation worker would, so `sample add` can promote it.
+    fn seed_stem(plane: &Plane, track: ReferenceTrackId) -> Stem {
+        let stem = Stem::new(
+            track,
+            StemType::Vocals,
+            content_hash(b"vocal stem bytes"),
+            "htdemucs_ft".into(),
+            "4.0.1".into(),
+            Some(210_000),
+            Some(44_100),
+        );
+        plane.samples.insert_stem(&stem).unwrap();
+        stem
+    }
+
+    #[test]
+    fn sample_add_promotes_stem_with_complete_attribution_and_enqueues_analysis() {
+        let plane = in_memory_plane();
+        let track = ReferenceTrack::new_upload("trackhash".into(), Some("Trust".into()), Some("Brent Faiyaz".into()), None, None);
+        plane.references.insert_track(&track).unwrap();
+        let stem = seed_stem(&plane, track.id);
+
+        let args = SampleAddArgs {
+            stem: stem.id,
+            project: ProjectId::new(),
+            artist: "Brent Faiyaz".into(),
+            time_range: (12_000, 18_000),
+            rights: RightsArg::CopyrightedUncleared,
+            title: None, // falls back to the track title "Trust"
+        };
+        let (frag, attr, job) = do_sample_add(&plane, &args).unwrap();
+
+        // The fragment is sampled + captured, audio = the stem.
+        assert_eq!(frag.provenance.as_str(), "sampled");
+        assert_eq!(frag.state.as_str(), "captured");
+        assert_eq!(frag.audio_uri, stem.audio_uri);
+        let stored = plane.repo.get_fragment(frag.id).unwrap().unwrap();
+        assert_eq!(stored.id, frag.id);
+
+        // Attribution is complete, persisted, title fell back to the track title.
+        assert_eq!(attr.attribution.source_title, "Trust");
+        assert_eq!(attr.attribution.source_artist, "Brent Faiyaz");
+        let got = plane.samples.get_attribution(frag.id).unwrap().unwrap();
+        assert_eq!(got, attr);
+
+        // A FeatureExtract job for the sample (it travels the human analysis path).
+        let rec = plane.queue.consume().unwrap().expect("one analysis job");
+        assert_eq!(rec.id, job);
+        match rec.envelope {
+            JobEnvelope::FeatureExtract { fragment_id } => assert_eq!(fragment_id, frag.id),
+            other => panic!("expected FeatureExtract, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sample_add_rejects_incomplete_attribution_and_creates_nothing() {
+        let plane = in_memory_plane();
+        // A track with NO title, and no --title flag → source_title is missing.
+        let track = ReferenceTrack::new_upload("trackhash".into(), None, None, None, None);
+        plane.references.insert_track(&track).unwrap();
+        let stem = seed_stem(&plane, track.id);
+
+        let args = SampleAddArgs {
+            stem: stem.id,
+            project: ProjectId::new(),
+            artist: "   ".into(), // whitespace-only artist = missing
+            time_range: (12_000, 18_000),
+            rights: RightsArg::Unknown,
+            title: None, // and no title anywhere
+        };
+        let err = do_sample_add(&plane, &args).unwrap_err();
+        match err {
+            CliError::IncompleteAttribution(msg) => {
+                assert!(msg.contains("source_title"));
+                assert!(msg.contains("artist"));
+            }
+            other => panic!("expected IncompleteAttribution, got {other:?}"),
+        }
+        // Nothing was created: no fragment, no attribution, no job.
+        assert!(plane.repo.list_fragments(None).unwrap().is_empty());
+        assert!(plane.queue.consume().unwrap().is_none());
+    }
+
+    #[test]
+    fn sample_add_unknown_stem_is_not_found() {
+        let plane = in_memory_plane();
+        let args = SampleAddArgs {
+            stem: StemId::new(),
+            project: ProjectId::new(),
+            artist: "x".into(),
+            time_range: (0, 1_000),
+            rights: RightsArg::Unknown,
+            title: Some("t".into()),
+        };
+        assert!(matches!(do_sample_add(&plane, &args), Err(CliError::NotFound(_))));
+    }
+
+    #[test]
+    fn credits_lists_a_projects_samples() {
+        let plane = in_memory_plane();
+        let project = ProjectId::new();
+        let track = ReferenceTrack::new_upload("trackhash".into(), Some("Trust".into()), None, None, None);
+        plane.references.insert_track(&track).unwrap();
+        let stem = seed_stem(&plane, track.id);
+        let args = SampleAddArgs {
+            stem: stem.id,
+            project,
+            artist: "Brent Faiyaz".into(),
+            time_range: (12_000, 18_000),
+            rights: RightsArg::CopyrightedUncleared,
+            title: Some("Trust".into()),
+        };
+        do_sample_add(&plane, &args).unwrap();
+
+        let rows = plane.samples.list_project_attributions(project).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].attribution.source_artist, "Brent Faiyaz");
+        // A different project has no credits.
+        assert!(plane
+            .samples
+            .list_project_attributions(ProjectId::new())
+            .unwrap()
+            .is_empty());
     }
 }

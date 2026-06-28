@@ -27,6 +27,11 @@ pub enum CliError {
     #[error("not found: {0}")]
     NotFound(String),
 
+    /// A `sample add` was rejected because attribution was incomplete (SAMP-03). The message names
+    /// exactly which fields are missing; nothing was created.
+    #[error("{0}")]
+    IncompleteAttribution(String),
+
     #[error("configuration error: {0}")]
     Config(String),
 }
