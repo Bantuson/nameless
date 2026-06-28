@@ -5,12 +5,26 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from nameless_workers.domain.reference import TonalBalance
 from nameless_workers.pure.tonal_balance import (
     DEFAULT_BAND_EDGES_HZ,
     band_energies,
     normalize_to_tonal_balance,
     tonal_balance_from_spectrum,
 )
+
+
+def test_persisted_jsonb_shape_is_the_named_object_not_an_array():
+    # WR-01: the cross-language contract. The reference_context.tonal_balance jsonb the analyzer
+    # persists MUST be model_dump()'s named-key object — the exact shape the Rust TonalBalance struct
+    # deserializes. The bands() array is for compact CLI/log output ONLY and must never be persisted.
+    tb = TonalBalance(low=0.3, low_mid=0.25, mid=0.2, high_mid=0.15, high=0.1)
+    dumped = tb.model_dump()
+    assert dumped == {"low": 0.3, "low_mid": 0.25, "mid": 0.2, "high_mid": 0.15, "high": 0.1}
+    assert isinstance(dumped, dict)  # an OBJECT — never a list
+    assert set(dumped.keys()) == {"low", "low_mid", "mid", "high_mid", "high"}
+    # The array form is a different representation and is NOT the persistence contract.
+    assert tb.bands() == [0.3, 0.25, 0.2, 0.15, 0.1]
 
 
 def test_band_energies_sums_power_into_the_right_bands():

@@ -304,6 +304,28 @@ mod tests {
         assert!((tb.total() - 1.0).abs() < 1e-6);
     }
 
+    /// WR-01 — pin the cross-language `tonal_balance` jsonb contract. The Python analyzer persists
+    /// `NonMelodicFeatures.tonal_balance.model_dump()`, i.e. the named-key OBJECT, and this is the
+    /// exact shape `get_context_summary` deserializes. This test deserializes that object shape and
+    /// asserts the bands-ARRAY shape (used only for compact CLI/log output) is REJECTED — so a writer
+    /// that accidentally emitted the array would be caught here rather than failing at runtime.
+    #[test]
+    fn tonal_balance_jsonb_contract_is_the_named_object_not_an_array() {
+        // The persisted/object shape (matches Python model_dump()).
+        let object = r#"{"low":0.3,"low_mid":0.25,"mid":0.2,"high_mid":0.15,"high":0.1}"#;
+        let tb: TonalBalance = serde_json::from_str(object).expect("named-key object must parse");
+        assert_eq!(tb.bands(), [0.3, 0.25, 0.2, 0.15, 0.1]);
+        assert!((tb.total() - 1.0).abs() < 1e-6);
+
+        // The bands-array shape is the WRONG contract and must NOT deserialize into the struct.
+        let array = r#"[0.3,0.25,0.2,0.15,0.1]"#;
+        assert!(
+            serde_json::from_str::<TonalBalance>(array).is_err(),
+            "the bands ARRAY form must not parse as TonalBalance — only the named-key object is the \
+             pinned jsonb contract"
+        );
+    }
+
     #[test]
     fn summary_drops_the_embedding_vector_but_keeps_its_dim() {
         // Fill the embedding with a DISTINCTIVE sentinel value that appears nowhere else (not in the
