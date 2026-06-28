@@ -148,15 +148,28 @@ pub async fn capture(
 ) -> Result<Json<CaptureResultDto>, ApiError> {
     let project = ProjectId(project);
     let form = read_capture_multipart(multipart).await?;
+
+    // Parity with the web mock's `requireProject` ordering (IN-01): the unknown-project 404 must
+    // fire BEFORE the empty-note 400. The existence read runs on the blocking pool like every other
+    // port call; `CliError` has no 400 variant, so the empty-note check stays a 400 here, AFTER it.
+    {
+        let plane = st.plane.clone();
+        run_blocking(move || {
+            if plane.repo.get_project(project)?.is_none() {
+                return Err(CliError::NotFound(format!("project {project}")));
+            }
+            Ok(())
+        })
+        .await?;
+    }
     if form.note.trim().is_empty() {
         return Err(ApiError::bad_request("an intent note is required"));
     }
+
     let plane = st.plane.clone();
     let dto = run_blocking(move || {
-        // 404 the unknown project before storing anything (parity with the mock's requireProject).
-        if plane.repo.get_project(project)?.is_none() {
-            return Err(CliError::NotFound(format!("project {project}")));
-        }
+        // Re-check existence inside the write path is unnecessary: the use-case is the only writer
+        // and a project cannot be deleted in M0, so the pre-check above is authoritative.
         let (frag, job) = do_capture_bytes(&plane, project, form.kind, form.note, &form.bytes)?;
         Ok(CaptureResultDto::from_domain(&frag, job))
     })
