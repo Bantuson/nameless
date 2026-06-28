@@ -39,8 +39,8 @@ from ..domain.models import (
 from .vocab import (
     ACTIONABLE_VERBS,
     PRODUCTION_VOCAB,
-    VISUAL_ONLY_PHRASES,
     count_param_mentions,
+    count_visual_deixis,
     sentences,
     words,
 )
@@ -160,7 +160,9 @@ def _visual_only_penalty(text: str, cfg: ScoringConfig) -> float:
     a small floor. A transcript that is mostly unpaid pointing gets crushed (up to ``max_visual_penalty``).
     """
     low = text.lower()
-    deixis = sum(low.count(phrase) for phrase in VISUAL_ONLY_PHRASES)
+    # WR-01: word-boundaried + non-overlapping deixis count (no "boomy" false positive, no double-count
+    # of overlapping phrases like "just like that").
+    deixis = count_visual_deixis(low)
     params = count_param_mentions(low)
     unpaid = deixis - params
     if unpaid < cfg.visual_phrase_floor:

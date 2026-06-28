@@ -90,6 +90,29 @@ VISUAL_ONLY_PHRASES: tuple[str, ...] = (
     "boom",
 )
 
+# WR-01: the deixis tally must be word-boundaried and non-overlapping, or the gate mis-calibrates:
+#   * substring matching penalizes legitimate craft — bare "boom" matched inside "boomy"/"boombap"
+#     (common in bass/drum tutorials, the target genre), wrongly attenuating real lessons;
+#   * overlapping phrases double-counted — "just like that" hit BOTH "like that" AND "just like that",
+#     and "and boom" hit BOTH "boom" AND "and boom", inflating the penalty past the per-phrase model.
+# One alternation regex with ``\b`` boundaries, phrases ordered LONGEST-FIRST, scanned non-overlappingly
+# (``finditer`` consumes each matched span) fixes both: "boom" never matches "boomy", and at any position
+# the longest applicable phrase wins exactly once.
+_VISUAL_DEIXIS_RE: re.Pattern[str] = re.compile(
+    r"\b(?:" + "|".join(re.escape(p) for p in sorted(VISUAL_ONLY_PHRASES, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def count_visual_deixis(text: str) -> int:
+    """Count screen-pointing deixis phrases, word-boundaried and non-overlapping (WR-01). Pure.
+
+    Each matched span is consumed once, and phrases are tried longest-first, so overlapping entries
+    ("like that" vs "just like that") count as a single phrase and bare tokens ("boom") never match
+    inside a longer word ("boomy"). Returns the number of deixis phrase occurrences.
+    """
+    return len(_VISUAL_DEIXIS_RE.findall(text))
+
 # ---------------------------------------------------------------------------------------------
 # Numeric parameters with units — real values to EXTRACT (never invent). Rescues a "like this".
 # ---------------------------------------------------------------------------------------------

@@ -62,6 +62,32 @@ def test_numbers_pay_for_deixis_so_real_instructions_survive():
     assert result.visual_only_penalty == 0.0
 
 
+def test_boomy_lowend_is_not_penalized_as_visual_deixis():
+    # WR-01: bare "boom" must not substring-match "boomy" — a bass tutorial saying "tighten the boomy low
+    # end" is real craft, not screen-pointing. It must carry no visual penalty / no visual_only flag.
+    craft = [
+        (0.0, 6.0, "tighten the boomy low end and high-pass the log drum around 40 hz"),
+        (6.0, 6.0, "the bass gets boomier below 80 hz so cut 60 hz and sidechain the kick"),
+        (12.0, 6.0, "add a boombap kick and compress the bus at 4 to 1 with 120 ms release"),
+    ]
+    t = make_transcript(caption_source=CaptionSource.MANUAL, segments=craft)
+    result = extractability_score(t)
+    assert result.visual_only_penalty == 0.0
+    assert "visual_only" not in result.flags
+
+
+def test_overlapping_deixis_phrases_are_counted_once_not_doubled():
+    # WR-01: "just like that" must count as ONE deixis phrase (not also "like that"); "and boom" as one
+    # (not also "boom"). Verify the pure counter de-overlaps and word-bounds.
+    from knowledge_pipeline.pure.vocab import count_visual_deixis
+
+    assert count_visual_deixis("just like that") == 1          # not 2 (was: "like that" + "just like that")
+    assert count_visual_deixis("and boom") == 1                # not 2 (was: "boom" + "and boom")
+    assert count_visual_deixis("something like this") == 1     # not 2 (was: "like this" + "something like this")
+    assert count_visual_deixis("the boomy boombap boomier kick") == 0  # no bare-token substring hits
+    assert count_visual_deixis("boom, like that, you see") == 3        # three distinct genuine phrases
+
+
 def test_caption_source_weighting_orders_manual_asr_auto_none():
     segs = RICH
     manual = extractability_score(make_transcript(caption_source=CaptionSource.MANUAL, segments=segs))
