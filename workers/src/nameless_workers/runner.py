@@ -15,8 +15,11 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from pydantic import ValidationError
+
 from .consumer import AnalyzeError, AnalyzeJobConsumer
 from .domain.models import AnalyzeOutcome, FeatureExtractJob
+from .domain.state import IllegalTransition
 from .ports import JobSource
 
 logger = logging.getLogger("nameless_workers.runner")
@@ -40,7 +43,26 @@ def run_once(source: JobSource, consumer: AnalyzeJobConsumer) -> Optional[Analyz
     try:
         outcome = consumer.handle(envelope)
     except AnalyzeError as exc:
+        # Recoverable (load/extract/embed/persist failed, or fragment not yet present): let the
+        # queue's bounded RetryPolicy retry/dead-letter. A redeliver re-enters via the idempotency path.
         logger.warning("analysis failed (will retry): %s", exc)
+        source.retry(lease)
+        return None
+    except (IllegalTransition, ValidationError) as exc:
+        # PERMANENTLY un-analyzable, not a transient fault — and unrelated to AnalyzeError:
+        #   * IllegalTransition: a placed/mixed/ai-path/rejected (or concurrently-advanced) fragment is
+        #     not analyzable; a retry would raise identically forever.
+        #   * ValidationError: get_fragment built a FragmentRecord from a malformed DB row (NULL
+        #     note_text/audio_uri/kind); the row will not heal on redelivery.
+        # ACK to drop it so one poison/misrouted fragment cannot loop or crash the worker (WR-01).
+        logger.error("permanently un-analyzable job, acking to drop: %s", exc)
+        source.ack(lease)
+        return None
+    except Exception as exc:  # noqa: BLE001 - last-resort guard: an unexpected fault must not crash run_forever
+        # Unknown failure (e.g. KeyError from a row vanishing between get_fragment and advance, or a
+        # latent bug). Treat as retryable so the bounded ceiling/dead-letter handles it rather than
+        # taking the whole loop down on a single job.
+        logger.exception("unexpected error processing job; will retry: %s", exc)
         source.retry(lease)
         return None
 

@@ -86,3 +86,25 @@ def test_non_feature_job_is_acked_not_processed():
     outcome = run_once(source, _consumer(loader, repo))
     assert outcome is None
     assert len(source.acked) == 1  # acked so it does not loop here
+
+
+def test_poison_unanalyzable_fragment_is_acked_not_crashed():
+    """WR-01: a job targeting a structurally un-analyzable fragment (already ``placed``) makes
+    ``consumer.handle`` raise ``IllegalTransition`` — NOT an ``AnalyzeError``. The run loop must catch
+    it and ACK (drop) rather than let it escape and crash ``run_forever``. It will never succeed on
+    retry, so acking is correct (and it is not re-queued or dead-lettered)."""
+    loader = InMemoryAudioLoader()
+    repo = InMemoryFragmentRepo()
+    rec = make_record(state="placed", audio_uri="dd13")  # not analyzable: no PLACED -> ANALYZE edge
+    loader.put(rec.audio_uri, AUDIO)
+    repo.insert(rec)
+
+    source = InMemoryJobSource(max_attempts=5)
+    source.enqueue(FeatureExtractJob(fragment_id=rec.id))
+
+    # Must NOT raise — the poison fragment is absorbed, not propagated.
+    outcome = run_once(source, _consumer(loader, repo))
+    assert outcome is None
+    assert len(source.acked) == 1  # acked-to-drop (permanently un-analyzable)
+    assert source.dead_lettered == []
+    assert source.poll() is None  # not re-queued: the queue is drained, the worker survives
