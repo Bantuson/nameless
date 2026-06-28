@@ -35,6 +35,25 @@ GENRE_SEARCH_TERMS: dict[str, tuple[str, ...]] = {
     "alt-piano": ("alternative piano amapiano", "alt piano amapiano", "piano amapiano"),
 }
 
+# `alt-piano` is the canonical subgenre slug everywhere downstream (GENRES, artist anchors, track/claim
+# records). The composite CELL the sparse-genre skill is authored at uses the long form
+# `alternative-piano` (decompose.ALT_PIANO_TARGET). They denote ONE subgenre; this single alias map is the
+# canonical place to reconcile them, replacing scattered inline `.replace()` calls (IN-02/IN-03).
+GENRE_ALIASES: dict[str, str] = {
+    "alternative-piano": "alt-piano",
+}
+
+
+def canonical_genre(slug: str) -> str:
+    """Canonicalize a genre slug to its registry form (e.g. 'alternative-piano' -> 'alt-piano'). Pure."""
+    return GENRE_ALIASES.get(slug, slug)
+
+
+def genre_aliases(slug: str) -> set[str]:
+    """Every slug denoting the same subgenre as ``slug`` (canonical form + known aliases + itself). Pure."""
+    canon = canonical_genre(slug)
+    return {slug, canon} | {alias for alias, target in GENRE_ALIASES.items() if target == canon}
+
 # ---------------------------------------------------------------------------------------------
 # Axis 2 — the production stages (the rows of the grid)
 # ---------------------------------------------------------------------------------------------

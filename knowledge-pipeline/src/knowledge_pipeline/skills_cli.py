@@ -248,12 +248,20 @@ def _handle_synthesize(args: argparse.Namespace) -> int:
 
 
 def _handle_ground(args: argparse.Namespace) -> int:
+    from .domain.genres import canonical_genre
     from .pure.decompose import ALT_PIANO_TARGET, decompose, known_targets
 
     pipeline = _build_grounding_pipeline(args)
     target = ALT_PIANO_TARGET
     if args.target:
-        match = next((t for t in known_targets() if t.genre == args.target or t.slug == args.target), None)
+        # IN-03: accept the `alt-piano` alias for the `alternative-piano` cell (the slug used throughout
+        # fixtures/records) via the centralized alias map, not just the literal cell genre/slug.
+        wanted = canonical_genre(args.target)
+        match = next(
+            (t for t in known_targets()
+             if canonical_genre(t.genre) == wanted or t.slug == args.target),
+            None,
+        )
         if match is None:
             raise SystemExit(
                 f"no decomposition for target '{args.target}'. Known: "

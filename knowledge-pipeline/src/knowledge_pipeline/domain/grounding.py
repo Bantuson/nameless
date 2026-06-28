@@ -164,6 +164,13 @@ class AudioDerivedClaim(BaseModel):
         measured ``statement`` verbatim (so the gate's quote-match + number checks pass against the audio
         snapshot), and ``caption_source`` is ``NONE`` — there is no caption; this is measured signal, and
         the ``audio:`` id prefix is what labels it as a distinct evidence kind in every citation line.
+
+        Trust-boundary note (IN-04): because ``quote == statement`` and the synthetic snapshot segment text
+        is that same ``statement``, the gate's R5 rot-check and number-vs-quote check are tautological for
+        audio claims — the record IS its own source. This certifies SYNTHESIS FIDELITY (the synthesizer
+        did not alter "110 bpm" into "120 bpm") but provides NO independent verification of the measurement
+        itself; the trust boundary for the measured value is the analyzer, by design ("the track is the
+        citation").
         """
         from .claims import Claim  # local import: domain.claims imports nothing from here (no cycle)
 

@@ -34,6 +34,7 @@ from typing import Callable, Optional, Sequence
 from pydantic import BaseModel, Field
 
 from .domain.claims import Claim
+from .domain.genres import genre_aliases
 from .domain.grounding import (
     AudioAnalysisRecord,
     AudioDerivedClaim,
@@ -83,7 +84,7 @@ def _direct_tutorial_sources(parent_claims: Sequence[Claim], target: ProductionC
     tutorial coverage of the sparse subgenre, which is exactly what is missing. Audio ``audio:`` ids and
     parent-genre claims (amapiano/rnb/deep-house) do NOT count as direct coverage.
     """
-    target_genres = {target.genre, target.genre.replace("alternative-", "alt-")}
+    target_genres = genre_aliases(target.genre)
     sources = {
         c.source_video_id
         for c in parent_claims

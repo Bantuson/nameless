@@ -86,8 +86,7 @@ class WorkerTrackAnalyzer:
         return self._extractor, self._embedder
 
     def analyze(self, track: TrackRef) -> AudioAnalysisRecord:
-        import numpy as np  # lazy
-
+        # IN-01: no numpy needed at this level — every DSP helper lazy-imports its own ``np`` where used.
         audio = self._load_bytes(track)
         extractor, embedder = self._ensure_workers()
 
