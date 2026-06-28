@@ -180,8 +180,13 @@ class YoutubeTranscriptFetcher:
 
         subs = (info or {}).get("subtitles") or {}
         auto = (info or {}).get("automatic_captions") or {}
-        has_manual = bool(subs)
-        has_auto = bool(auto)
+        # WR-03: availability must reflect what _pick_track can ACTUALLY obtain — a downloadable ``vtt``
+        # track — not merely that a track is *listed*. A video may list a manual track in a non-vtt format
+        # (e.g. srv3) while only its auto track is vtt; `bool(subs)` would report has_manual=True, the
+        # picked transcript would be AUTO, and `fallback_decision` would wrongly skip ASR for a noisy auto
+        # track. Deriving from usable vtt presence keeps the decision (and the reported source) honest.
+        has_manual = self._has_usable_vtt(subs)
+        has_auto = self._has_usable_vtt(auto)
 
         track, source = self._pick_track(subs, auto)
         if track is None:
@@ -207,6 +212,19 @@ class YoutubeTranscriptFetcher:
             ),
             transcript=transcript,
         )
+
+    @staticmethod
+    def _has_usable_vtt(langs: dict) -> bool:
+        """True iff some language offers a downloadable ``vtt`` track — what _pick_track can use (WR-03).
+
+        Consistent with _pick_track's own filter (``ext == "vtt"`` and a non-empty ``url``), so
+        ``has_manual`` is True exactly when _pick_track would return a MANUAL source from ``subs``.
+        """
+        for fmts in (langs or {}).values():
+            for fmt in (fmts or []):
+                if fmt.get("ext") == "vtt" and fmt.get("url"):
+                    return True
+        return False
 
     def _pick_track(self, subs: dict, auto: dict):
         """Choose a VTT track URL, preferring manual subs over automatic captions, in language order."""
