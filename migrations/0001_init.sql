@@ -47,7 +47,12 @@ create table projects (
 create table fragments (
     id                 uuid primary key,
     project_id         uuid not null references projects (id),
-    kind               text not null,                 -- FragmentKind label (melody|hook|beat|...)
+    kind               text not null
+        check (kind in ('melody','hook','beat','rhythm','chord','pad','adlib','stem','full')),
+                                                        -- FragmentKind label; CHECK mirrors the closed
+                                                        -- Rust enum so the DB rejects unknown labels too.
+                                                        -- (kept as text+CHECK, not a pg enum, so the
+                                                        --  adapter's bind stays a plain text param.)
     provenance         provenance not null,
     audio_uri          text not null,                 -- SHA-256 content-hash object key (immutable)
     duration_ms        int,
