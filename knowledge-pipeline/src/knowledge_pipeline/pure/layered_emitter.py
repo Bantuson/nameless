@@ -64,7 +64,12 @@ def _yaml_scalar(value: str) -> str:
 
 
 def _mmss(ms: int) -> str:
-    mm, ss = divmod(ms // 1000, 60)
+    # IN-02: citations are receipts a human jumps to during the spot-audit. Long-form tutorials/mixes
+    # exceed an hour, so roll into hh:mm:ss past 60 min instead of rendering a misleading "75:00".
+    hh, rem = divmod(ms // 1000, 3600)
+    mm, ss = divmod(rem, 60)
+    if hh:
+        return f"{hh:d}:{mm:02d}:{ss:02d}"
     return f"{mm:02d}:{ss:02d}"
 
 
