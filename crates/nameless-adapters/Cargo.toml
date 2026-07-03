@@ -20,9 +20,11 @@ tokio = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
 sqlxmq = { workspace = true, optional = true }
 rust-s3 = { workspace = true, optional = true }
+# repo_pg names `uuid::Uuid` directly — declare it rather than lean on sqlx's transitive dep.
+uuid = { workspace = true, optional = true }
 
 [features]
 default = []
 # Enables the production Postgres repo, durable sqlxmq queue, and S3/R2 object store.
 # Heavy (tokio + sqlx + sqlxmq + S3) — may OOM on a 4GB box; build on a real dev machine.
-postgres = ["dep:tokio", "dep:sqlx", "dep:sqlxmq", "dep:rust-s3"]
+postgres = ["dep:tokio", "dep:sqlx", "dep:sqlxmq", "dep:rust-s3", "dep:uuid"]

@@ -12,7 +12,8 @@
 
 use std::path::PathBuf;
 
-use nameless_core::ports::{FragmentRepo, JobQueue, ObjectStore, ReferenceStore, SampleStore};
+use nameless_core::job::JobQueue;
+use nameless_core::ports::{FragmentRepo, ObjectStore, ReferenceStore, SampleStore};
 
 use nameless_adapters::{
     FileFragmentRepo, FileReferenceStore, FileSampleStore, FilesystemObjectStore, InMemoryJobQueue,

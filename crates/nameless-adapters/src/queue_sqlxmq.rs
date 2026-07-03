@@ -133,8 +133,8 @@ impl JobQueue for SqlxmqJobQueue {
         let payload =
             serde_json::to_value(&env).map_err(|e| JobError::Serialization(e.to_string()))?;
         let backoff = self.policy.backoff(0);
-        // Mirror the RetryPolicy onto sqlxmq's own retry machinery.
-        let retries = self.policy.max_attempts.saturating_sub(1) as usize;
+        // Mirror the RetryPolicy onto sqlxmq's own retry machinery (set_retries takes u32).
+        let retries = self.policy.max_attempts.saturating_sub(1);
 
         // Select the per-kind builder (distinct job name + channel). The builder type is the same
         // (`sqlxmq::JobBuilder`) across all registrations — only the embedded name/channel differ —
