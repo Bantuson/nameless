@@ -1,0 +1,141 @@
+# CI — the verification vehicle for the env-gated work tracked in .planning/STATE.md.
+#
+# This repo was built on a 4GB machine with no Rust toolchain, no Docker, and no
+# Postgres: every cargo result to date is env-gated and the workspace has NEVER
+# been compiled. This workflow is the first real compile. The four jobs are
+# intentionally pure siblings (no inter-job ordering), so a Rust compile failure
+# can never mask the Python or web results.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# No secrets are used anywhere in this workflow; read-only token keeps PR builds safe.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # First-ever build/test of the Rust workspace on the lean (default) feature set.
+  # No Cargo.lock exists yet (never compiled) — the first build generates it.
+  rust-lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (lean workspace)
+        run: cargo build --workspace
+      - name: Test (lean workspace)
+        run: cargo test --workspace
+
+  # Heavy `postgres` feature against a real migrated pgvector database. sqlx
+  # query!/query_as! macros connect to DATABASE_URL at COMPILE time (this repo
+  # has no .sqlx offline cache), so this job doubles as compile-time query
+  # verification. Specifically, this job verifies review finding P7 CR-01:
+  # nullable PG columns read into non-Option fields in get_context_summary —
+  # the crate only compiles if the NOT NULL fix holds under real sqlx checks.
+  rust-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        # Ships the pgvector extension that migrations/0001_init.sql enables
+        # via `create extension if not exists vector`.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: nameless
+          POSTGRES_PASSWORD: nameless
+          POSTGRES_DB: nameless
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Job-level on purpose: DATABASE_URL must be present both when the
+      # migrations run AND at cargo build time (sqlx macros connect during
+      # compilation).
+      DATABASE_URL: postgres://nameless:nameless@localhost:5432/nameless
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Migrations MUST run before any cargo invocation (sqlx compile-time
+      # verification queries the live schema). The shell glob applies
+      # 0001 -> 0004 in lexicographic order; ON_ERROR_STOP=1 makes a failed
+      # migration fail the job instead of silently continuing. Plain psql is
+      # preinstalled on ubuntu-latest.
+      - name: Apply migrations
+        run: |
+          for f in migrations/*.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+      # This is a VIRTUAL workspace (root Cargo.toml has no [package]), so a
+      # bare `--features postgres` is rejected at the root. The pkg/feature
+      # syntax below is what makes this work; nameless-core has no such
+      # feature by design.
+      - name: Build (postgres feature)
+        run: cargo build --workspace --features nameless-adapters/postgres,nameless-cli/postgres,nameless-api/postgres
+      - name: Test (postgres feature)
+        run: cargo test --workspace --features nameless-adapters/postgres,nameless-cli/postgres,nameless-api/postgres
+
+  # Both Python test suites run entirely against fakes on the light base tier,
+  # so only the `dev` extra is installed — the heavy extras (ml, pg, ingest,
+  # asr, extract, embed) would pull torch/librosa into CI: slow, wasteful,
+  # and unnecessary.
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [workers, knowledge-pipeline]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "${{ matrix.project }}/pyproject.toml"
+      # Both projects declare requires-python >=3.11,<3.13; 3.12 is the safe pin.
+      - name: Sync (light base + dev extra)
+        run: uv sync --python 3.12 --extra dev
+      - name: Test
+        run: uv run pytest
+
+  # Web surface: clean install from the lockfile, unit tests, then the
+  # production build. `npm run build` is `tsc --noEmit && vite build`, so the
+  # build step covers the typecheck too — no separate typecheck step needed.
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
