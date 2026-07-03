@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-06-26)
 Phase: 10 of 10 — M0 (9) + inserted Phase 10 (axum HTTP API) all built & committed
 Plan: n/a — course-project mode
 Status: M0 reviewed + ALL 4 critical & 32 warning FIXED + 33 Info swept (most fixed). Phase 10 axum API built, contract-parity reviewed CLEAN, 2 warnings + 1 info fixed. 438 Python/web tests pass here; ALL Rust (incl. the new axum crate) is env-gated — applied by reading, never compiled.
-Last activity: 2026-06-29 — Info sweep + Phase 10 axum API (build → review → fix)
+Last activity: 2026-07-04 — Completed quick task 260704-0v6: GitHub Actions CI workflow (.github/workflows/ci.yml) — clears env-gated Rust verification once pushed to GitHub
 
 Progress: [██████████] 100% (build) · review DONE · fixes DONE · Info swept · axum API DONE · env-gated cargo/ML/DB verify + security pass + M1 pending
 
@@ -97,6 +97,12 @@ None yet.
 [Issues that affect future work]
 
 - Phase 5/6 (knowledge synthesis + sparse grounding) flagged by research for deeper per-phase planning: claim-mining/scrutiny prompt design, citation-gate, and consensus/conflict separation are MEDIUM-confidence.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260704-0v6 | Add GitHub Actions CI workflow to verify env-gated Rust, Python, and web builds | 2026-07-04 | 061b8bb | [260704-0v6-add-github-actions-ci-workflow-to-verify](./quick/260704-0v6-add-github-actions-ci-workflow-to-verify/) |
 
 ## Deferred Items
 
