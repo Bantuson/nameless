@@ -45,7 +45,9 @@ symphonia = { version = "0.5", features = ["wav", "mp3", "flac", "isomp4", "aac"
 # Heavy leaf — ONLY pulled in by the `postgres` feature of nameless-adapters.
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "macros"] }
-sqlxmq = "0.5"
+# sqlxmq 0.6 is the sqlx-0.8 line; 0.5 pins sqlx 0.7 and fails workspace resolution
+# (two sqlx majors -> duplicate `links = "sqlite3"` via each one's optional sqlx-sqlite).
+sqlxmq = "0.6"
 rust-s3 = "0.35"
 # Control-plane HTTP API (nameless-api). axum 0.8 is the current stable line; `multipart`
 # enables the file-upload extractor for capture + reference upload. `tower` is used by the
