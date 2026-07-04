@@ -19,6 +19,10 @@ export default defineConfig({
   server: proxyTarget
     ? {
         proxy: Object.fromEntries(apiRoutes.map((r) => [r, { target: proxyTarget, changeOrigin: true }])),
+        // Vite (>=5.4.12 security patch) 403s requests whose Host header is not localhost.
+        // Remote dev access always arrives under a tunnel hostname, so allow the two dev
+        // tunnel domains when the proxy is on (never affects plain-localhost dev or prod build).
+        allowedHosts: ['.app.github.dev', '.trycloudflare.com'],
       }
     : undefined,
   test: {
