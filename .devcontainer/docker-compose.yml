@@ -1,0 +1,47 @@
+# Devcontainer compose file for GitHub Codespaces.
+#
+# The `db` service mirrors .github/workflows/ci.yml's `rust-postgres` service
+# EXACTLY (image pgvector/pgvector:pg16, credentials nameless/nameless/nameless,
+# pg_isready health check) so a Codespace and CI verify against the same schema
+# and the same sqlx compile-time environment.
+#
+# 5432 is deliberately NOT published to the host: the app service reaches the
+# database over the compose network via the service name `db`, which is why
+# DATABASE_URL below uses host `db` (not localhost, unlike CI where the service
+# container is port-mapped onto the runner).
+
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/base:ubuntu
+    volumes:
+      - ..:/workspaces/nameless:cached
+    command: sleep infinity
+    environment:
+      # Required at RUNTIME by the --server profile (crates/nameless-cli/src/profile.rs)
+      # AND at COMPILE time by sqlx query!/query_as! macros when building
+      # --features postgres (no .sqlx offline cache in this repo — see ci.yml).
+      DATABASE_URL: postgres://nameless:nameless@db:5432/nameless
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    # Ships the pgvector extension that migrations/0001_init.sql enables
+    # via `create extension if not exists vector`. Same image as CI.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: nameless
+      POSTGRES_PASSWORD: nameless
+      POSTGRES_DB: nameless
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nameless"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      # Named volume so the migrated database survives container rebuilds;
+      # post-create.sh's marker table makes re-runs skip applied migrations.
+      - nameless-pgdata:/var/lib/postgresql/data
+
+volumes:
+  nameless-pgdata:
