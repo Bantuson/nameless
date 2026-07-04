@@ -106,7 +106,7 @@ impl ReferenceTrack {
 /// "is this track bright? bass-heavy?"), deliberately too coarse to encode a melody or chord — the
 /// 12 chroma pitch classes are folded away into 5 frequency regions. The Python
 /// `pure/tonal_balance.py` computes these from band RMS; this type only carries the result.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct TonalBalance {
     /// ~20–120 Hz (sub).
     pub low: f32,
@@ -118,6 +118,77 @@ pub struct TonalBalance {
     pub high_mid: f32,
     /// ~6k–20k Hz (air / brilliance).
     pub high: f32,
+}
+
+// Hand-written Deserialize (WR-01): the DERIVED impl also accepts a positional SEQUENCE
+// (`[0.3, 0.25, ...]` parses field-by-index), which is exactly the bands-array shape the
+// cross-language jsonb contract forbids. Driving `deserialize_map` through a map-only visitor
+// makes the array form a hard error while keeping the named-key object shape identical to what
+// the Python analyzer's `model_dump()` persists.
+impl<'de> serde::Deserialize<'de> for TonalBalance {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct TonalBalanceVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for TonalBalanceVisitor {
+            type Value = TonalBalance;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("a tonal-balance object with named low/low_mid/mid/high_mid/high keys")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<TonalBalance, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                const FIELDS: &[&str] = &["low", "low_mid", "mid", "high_mid", "high"];
+                let (mut low, mut low_mid, mut mid, mut high_mid, mut high) =
+                    (None, None, None, None, None);
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "low" => {
+                            if low.replace(map.next_value()?).is_some() {
+                                return Err(serde::de::Error::duplicate_field("low"));
+                            }
+                        }
+                        "low_mid" => {
+                            if low_mid.replace(map.next_value()?).is_some() {
+                                return Err(serde::de::Error::duplicate_field("low_mid"));
+                            }
+                        }
+                        "mid" => {
+                            if mid.replace(map.next_value()?).is_some() {
+                                return Err(serde::de::Error::duplicate_field("mid"));
+                            }
+                        }
+                        "high_mid" => {
+                            if high_mid.replace(map.next_value()?).is_some() {
+                                return Err(serde::de::Error::duplicate_field("high_mid"));
+                            }
+                        }
+                        "high" => {
+                            if high.replace(map.next_value()?).is_some() {
+                                return Err(serde::de::Error::duplicate_field("high"));
+                            }
+                        }
+                        other => return Err(serde::de::Error::unknown_field(other, FIELDS)),
+                    }
+                }
+                Ok(TonalBalance {
+                    low: low.ok_or_else(|| serde::de::Error::missing_field("low"))?,
+                    low_mid: low_mid.ok_or_else(|| serde::de::Error::missing_field("low_mid"))?,
+                    mid: mid.ok_or_else(|| serde::de::Error::missing_field("mid"))?,
+                    high_mid: high_mid
+                        .ok_or_else(|| serde::de::Error::missing_field("high_mid"))?,
+                    high: high.ok_or_else(|| serde::de::Error::missing_field("high"))?,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(TonalBalanceVisitor)
+    }
 }
 
 impl TonalBalance {
