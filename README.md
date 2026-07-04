@@ -145,6 +145,50 @@ NAMELESS_STORAGE_BUCKET=... NAMELESS_STORAGE_ENDPOINT=... NAMELESS_STORAGE_ACCES
   cargo test -p nameless-adapters --features postgres -- --ignored s3
 ```
 
+## Run in a Codespace
+
+Opening this repo in a GitHub Codespace (free 4-core/16GB tier) gives you a container with Rust
+stable, Node 22, Python 3.12 + uv, `psql`, and ffmpeg, plus a running pgvector Postgres using the
+**same image and credentials as CI** (`pgvector/pgvector:pg16`, `nameless`/`nameless`/`nameless`) —
+`DATABASE_URL` is pre-set to `postgres://nameless:nameless@db:5432/nameless`, and post-create has
+already applied migrations 0001–0005 and run `npm ci` in `web/`. No manual setup steps.
+
+**Start the API** (either profile):
+
+```bash
+# Lean, no DB (in-process --local backends):
+cargo run -p nameless-api
+
+# Postgres profile — DATABASE_URL is already exported and the DB already migrated,
+# which is exactly what the sqlx compile-time macros need (see the NOTE on sqlx
+# compile-time-checked SQL above):
+cargo run -p nameless-api --features postgres -- --server
+```
+
+The server listens on `127.0.0.1:8080` (`NAMELESS_API_ADDR` default); Codespaces auto-forwards
+port 8080.
+
+**Start the web UI against it:**
+
+```bash
+cd web
+VITE_NAMELESS_CLIENT=http npm run dev
+```
+
+`VITE_API_BASE_URL` defaults to `http://127.0.0.1:8080` (`web/src/api/createClient.ts`) — correct
+when using the Codespace from VS Code (desktop), where forwarded ports appear on your machine's
+localhost.
+
+**Browser-based Codespaces caveat:** in the browser, the web UI's origin is
+`https://<codespace>-5173.app.github.dev`, so you must (a) set port 8080's visibility to **Public**
+in the Ports panel (forwarded URLs otherwise require auth cookies the fetch won't carry), (b) start
+the API with `NAMELESS_CORS_ALLOW_ORIGIN=https://<codespace>-5173.app.github.dev`, and (c) start
+the web UI with `VITE_API_BASE_URL=https://<codespace>-8080.app.github.dev`.
+
+*This configuration was authored on a machine that cannot run Docker — the closure step is opening
+the repo in a Codespace (Code → Codespaces → Create codespace on main) and running the two commands
+above; nothing here has been executed locally.*
+
 ## Supply chain (verify before first build)
 
 These crates are pinned in `Cargo.toml` at sensible current (2026) versions but were **not**
