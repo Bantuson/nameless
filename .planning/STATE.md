@@ -5,10 +5,10 @@ milestone_name: milestone
 current_phase: 10
 current_phase_name: Control-Plane HTTP API
 status: milestone_complete
-stopped_at: M0 (9 phases) delivered + reviewed + fixed; PLUS inserted Phase 10 (axum control-plane HTTP API) — built, contract-parity reviewed CLEAN vs the TS client, fixed. All Rust env-gated (uncompiled, 4GB/no-toolchain).
-last_updated: "2026-06-29T00:00:00.000Z"
-last_activity: 2026-06-29
-last_activity_desc: Info-findings sweep (11 commits) + built Phase 10 axum HTTP API (the deferred web backend) — reviewed CLEAN on contract parity, 2 warnings + 1 info fixed. Python/web tests still green (438); all Rust env-gated.
+stopped_at: "M0 + Phase 10 delivered. Repo published to github.com/Bantuson/nameless (public); GitHub Actions CI added and GREEN across all 5 jobs (run 28688641348) — the Rust env-gate is CLEARED: full workspace compiles on both profiles, 129 tests pass per profile, sqlx compile-time queries verified against a live migrated Postgres16+pgvector (P7 CR-01 confirmed fixed). 6 first-compile bugs found+fixed by CI. Remaining env-gated: real ML model paths (Demucs/CLAP/whisper), live YouTube ingest, running the axum server against the web UI."
+last_updated: "2026-07-04T00:05:00.000Z"
+last_activity: 2026-07-04
+last_activity_desc: Quick task 260704-0v6 — CI workflow + repo published public + 3 fix commits from first-ever compile; all 5 CI jobs green. Rust verification cleared for $0 via GitHub Actions.
 progress:
   total_phases: 10
   completed_phases: 10
@@ -102,7 +102,7 @@ None yet.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 260704-0v6 | Add GitHub Actions CI workflow to verify env-gated Rust, Python, and web builds | 2026-07-04 | 061b8bb | [260704-0v6-add-github-actions-ci-workflow-to-verify](./quick/260704-0v6-add-github-actions-ci-workflow-to-verify/) |
+| 260704-0v6 | Add GitHub Actions CI workflow to verify env-gated Rust, Python, and web builds — pushed public to github.com/Bantuson/nameless; 3 fix rounds (sqlxmq 0.6, imports/types/uuid dep, map-only TonalBalance deserializer + vendored sqlxmq DDL); all 5 jobs GREEN (run 28688641348, 129 Rust tests/profile) | 2026-07-04 | 061b8bb..e8ca4e1 | [260704-0v6-add-github-actions-ci-workflow-to-verify](./quick/260704-0v6-add-github-actions-ci-workflow-to-verify/) |
 
 ## Deferred Items
 
