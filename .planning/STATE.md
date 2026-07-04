@@ -6,9 +6,9 @@ current_phase: 10
 current_phase_name: Control-Plane HTTP API
 status: milestone_complete
 stopped_at: "M0 + Phase 10 delivered. Repo published to github.com/Bantuson/nameless (public); GitHub Actions CI added and GREEN across all 5 jobs (run 28688641348) — the Rust env-gate is CLEARED: full workspace compiles on both profiles, 129 tests pass per profile, sqlx compile-time queries verified against a live migrated Postgres16+pgvector (P7 CR-01 confirmed fixed). 6 first-compile bugs found+fixed by CI. Remaining env-gated: real ML model paths (Demucs/CLAP/whisper), live YouTube ingest, running the axum server against the web UI."
-last_updated: "2026-07-04T00:05:00.000Z"
+last_updated: "2026-07-04T08:41:00.000Z"
 last_activity: 2026-07-04
-last_activity_desc: Quick task 260704-0v6 — CI workflow + repo published public + 3 fix commits from first-ever compile; all 5 CI jobs green. Rust verification cleared for $0 via GitHub Actions.
+last_activity_desc: Quick task 260704-em1 — GitHub Codespaces devcontainer (app + CI-identical pgvector Postgres, marker-guarded migrations, npm ci) + README "Run in a Codespace" section. Env-gated closure = open a Codespace and run the two commands.
 progress:
   total_phases: 10
   completed_phases: 10
@@ -103,6 +103,8 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260704-0v6 | Add GitHub Actions CI workflow to verify env-gated Rust, Python, and web builds — pushed public to github.com/Bantuson/nameless; 3 fix rounds (sqlxmq 0.6, imports/types/uuid dep, map-only TonalBalance deserializer + vendored sqlxmq DDL); all 5 jobs GREEN (run 28688641348, 129 Rust tests/profile) | 2026-07-04 | 061b8bb..e8ca4e1 | [260704-0v6-add-github-actions-ci-workflow-to-verify](./quick/260704-0v6-add-github-actions-ci-workflow-to-verify/) |
+| 260704-em1 | GitHub Codespaces devcontainer — docker-compose (app + CI-identical pgvector/pg16 Postgres), DATABASE_URL wired, idempotent post-create (pg_isready wait, marker-guarded migrations, npm ci), forwardPorts 8080/5173, README "Run in a Codespace". Env-gated closure: open Codespace, `cargo run -p nameless-api --features postgres -- --server` + `VITE_NAMELESS_CLIENT=http npm run dev` | 2026-07-04 | 08d7586..c77848e | [260704-em1-add-github-codespaces-devcontainer-to-ru](./quick/260704-em1-add-github-codespaces-devcontainer-to-ru/) |
+| 260704-em1 | Add GitHub Codespaces devcontainer — docker-compose (app + pgvector/pgvector:pg16 db, CI-identical credentials), devcontainer.json (rust/node22/py3.12, forwardPorts 8080+5173), marker-guarded migration post-create, README "Run in a Codespace" section; ci.yml untouched; Codespace launch env-gated | 2026-07-04 | 08d7586..c77848e | [260704-em1-add-github-codespaces-devcontainer-to-ru](./quick/260704-em1-add-github-codespaces-devcontainer-to-ru/) |
 
 ## Deferred Items
 
