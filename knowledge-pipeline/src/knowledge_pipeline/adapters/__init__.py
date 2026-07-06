@@ -32,6 +32,9 @@ Phase-4 stdlib-only adapters (imported EAGERLY — pydantic + stdlib only):
 
 Phase-5 stdlib-only adapters (imported EAGERLY — pydantic + stdlib only):
       - :class:`~knowledge_pipeline.adapters.skill_synthesizer_fake.FakeSkillSynthesizer`
+      - :class:`~knowledge_pipeline.adapters.skill_synthesizer_file.FileSkillSynthesizer`  (REAL — the
+        actual no-API drafting path over pre-drafted ``{stage}__{genre}.json`` files, not a fake;
+        json/pathlib are stdlib)
       - :class:`~knowledge_pipeline.adapters.skill_store_mem.InMemorySkillStore`
       - :class:`~knowledge_pipeline.adapters.skill_store_fs.FilesystemSkillStore`  (REAL — sqlite is stdlib)
     REAL LLM adapter (NOT imported here — anthropic LAZY inside __init__):
@@ -58,6 +61,7 @@ from .similarity_keyword import KeywordSimilarityIndex
 from .skill_store_fs import FilesystemSkillStore
 from .skill_store_mem import InMemorySkillStore
 from .skill_synthesizer_fake import FakeSkillSynthesizer
+from .skill_synthesizer_file import FileSkillSynthesizer
 from .track_analyzer_fake import FakeTrackAnalyzer
 from .transcribe_fake import FixedTextTranscriber
 
@@ -80,6 +84,7 @@ __all__ = [
     "KeywordSimilarityIndex",
     # Phase 5 — skill synthesis
     "FakeSkillSynthesizer",
+    "FileSkillSynthesizer",
     "InMemorySkillStore",
     "FilesystemSkillStore",
     # Phase 6 — sparse-genre grounding
