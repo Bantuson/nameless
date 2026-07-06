@@ -10,12 +10,16 @@ Subcommands:
   * ``skills promote``    — flip a skill draft -> promoted. HUMAN-GATED: requires ``--yes`` after review. [KNOW-11]
   * ``skills stats``      — compact roll-up (total / draft / promoted / by confidence).
 
-Two run modes for ``synthesize``:
+Three run modes for ``synthesize``:
   * ``--fixtures [DIR]`` (default = bundled claim fixtures) — OFFLINE end-to-end: mine the fixtures into an
     in-memory claim layer (Phase-4 fakes), synthesize with the deterministic FakeSkillSynthesizer, GATE,
     and write REAL SKILL.md files + a REAL ``registry.sqlite`` (sqlite is stdlib). Runs anywhere on the
     base install — this is what produces the committed example skills with no API call.
-  * live (no ``--fixtures``) — read the Phase-4 ``claims``/``clusters`` from ``registry.sqlite`` and author
+  * ``--drafts-dir DIR`` — OFFLINE no-API ingestion of Claude-Code-drafted ``{stage}__{genre}.json``
+    emit_skill payloads (KNOW-07/08): the REAL sqlite claim layer + REAL fs corpus/skill stores through
+    the SAME gate — a file draft with an invented number is REJECTED identically to API output. Cells
+    without a draft file are skipped with a stderr message naming the cell + expected filename.
+  * live (no flag) — read the Phase-4 ``claims``/``clusters`` from ``registry.sqlite`` and author
     with the REAL AnthropicSkillSynthesizer. ENV-GATED: ``uv sync --extra extract`` + ``ANTHROPIC_API_KEY``.
 
 Output stays compact (token strategy): one terse line per skill/cell; the SKILL.md body is printed only by
@@ -117,9 +121,61 @@ def _live_plane(args: argparse.Namespace):
     return synthesizer, skill_store, claim_store, corpus
 
 
+def _drafts_plane(args: argparse.Namespace):
+    """No-API plane: pre-drafted ``{stage}__{genre}.json`` files + the REAL fs corpus / sqlite claim layer.
+
+    Mirrors ``_live_plane``'s real-store wiring MINUS the anthropic import/key checks. The skip seam:
+    ``SynthesisPipeline`` has no per-cell error seam, so a missing draft file cannot raise-to-skip —
+    instead cell selection is pre-scoped via ``CellScopedClaimStore`` so cells without a file are never
+    selected. Skip/unused lines go to stderr so ``--json`` stdout stays machine-parseable.
+    """
+    from .adapters import FileSkillSynthesizer
+    from .adapters.claim_store_sqlite import SqliteClaimStore
+    from .adapters.corpus_fs import FilesystemCorpusStore
+    from .adapters.skill_store_fs import FilesystemSkillStore
+    from .adapters.skill_synthesizer_file import CellScopedClaimStore, draft_filename
+    from .pure.cell_selection import select_cells
+
+    drafts_dir = Path(args.drafts_dir)
+    if not drafts_dir.is_dir():
+        raise SystemExit(
+            f"drafts dir {drafts_dir} does not exist. Create it and put one emit_skill JSON per cell "
+            f"there, named {{stage}}__{{genre}}.json (e.g. vocal-layering__rnb.json), then re-run."
+        )
+
+    db = Path(args.corpus_root) / "registry.sqlite"
+    corpus = FilesystemCorpusStore(args.corpus_root)
+    corpus.init_schema()
+    claim_store = SqliteClaimStore(db)
+    claim_store.init_schema()
+    synthesizer = FileSkillSynthesizer(drafts_dir)
+    skill_store = FilesystemSkillStore(db, args.skills_root)
+
+    # The SAME selection the pipeline performs — partitioned by draft-file availability.
+    clusters = claim_store.list_clusters()
+    cells = select_cells(clusters, p1_only=not args.all)
+    available = [c for c in cells if synthesizer.has_draft(c)]
+    for cell in cells:
+        if cell not in available:
+            print(
+                f"SKIP {cell.slug}: no draft file {draft_filename(cell)} in {drafts_dir}",
+                file=sys.stderr,
+            )
+    expected = {draft_filename(c) for c in cells}
+    for path in sorted(drafts_dir.glob("*.json")):
+        if path.name not in expected:
+            print(
+                f"WARNING: unused draft file {path.name} (matches no selected cell)",
+                file=sys.stderr,
+            )
+    return synthesizer, skill_store, CellScopedClaimStore(claim_store, available), corpus
+
+
 def _build_pipeline(args: argparse.Namespace) -> SynthesisPipeline:
     if args.fixtures is not None:
         synthesizer, skill_store, claim_store, corpus = _fixture_plane(args)
+    elif getattr(args, "drafts_dir", None):
+        synthesizer, skill_store, claim_store, corpus = _drafts_plane(args)
     else:
         synthesizer, skill_store, claim_store, corpus = _live_plane(args)
     config = SynthesisConfig(p1_only=not args.all)
@@ -242,7 +298,17 @@ def _print_report(report: SynthesisReport, as_json: bool) -> None:
 # ---------------------------------------------------------------------------------------------
 def _handle_synthesize(args: argparse.Namespace) -> int:
     pipeline = _build_pipeline(args)
-    report = pipeline.synthesize()
+    if getattr(args, "drafts_dir", None):
+        # Drafts mode only: a present-but-broken file is a fatal authoring error — exit loudly,
+        # traceback-free, naming the offending file (there is no per-cell error seam to skip through).
+        from .adapters.skill_synthesizer_file import DraftFileError
+
+        try:
+            report = pipeline.synthesize()
+        except DraftFileError as exc:
+            raise SystemExit(str(exc))
+    else:
+        report = pipeline.synthesize()
     _print_report(report, args.json)
     return 0
 
@@ -416,9 +482,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_syn = sub.add_parser("synthesize", help="select P1 cells -> synthesize -> GATE -> emit draft SKILL.md")
     _add_roots(p_syn)
-    p_syn.add_argument(
+    syn_mode = p_syn.add_mutually_exclusive_group()
+    syn_mode.add_argument(
         "--fixtures", nargs="?", const="", default=None, metavar="DIR",
         help="OFFLINE end-to-end over the bundled claim fixtures (default). Omit for live env-gated synthesis.",
+    )
+    syn_mode.add_argument(
+        "--drafts-dir", default=None, metavar="DIR",
+        help="run OFFLINE over pre-drafted {stage}__{genre}.json emit_skill payloads (the no-API path — "
+             "Claude Code drafts file-to-file; every draft still passes the SAME citation gate; cells "
+             "without a file are skipped with a message).",
     )
     p_syn.add_argument("--all", action="store_true", help="author ALL evidenced cells, not only the P1 grid")
     p_syn.add_argument("--model", default="claude-opus-4-8", help="(live) Claude model id")
