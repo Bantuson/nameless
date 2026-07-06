@@ -7,12 +7,15 @@ Subcommands:
   * ``claims show``    — one claim traced to its source quote + timestamp + video. [KNOW-05 #2]
   * ``claims stats``   — compact roll-up (claims / clusters / contested / citation-verified).
 
-Two run modes (live is the DEFAULT; pass ``--fixtures`` for the offline path):
-  * live (no ``--fixtures``) — the REAL AnthropicClaimExtractor over the Phase-3 snapshot corpus.
+Three run modes (live is the DEFAULT; ``--fixtures`` and ``--mined-dir`` are the offline paths):
+  * live (no flag) — the REAL AnthropicClaimExtractor over the Phase-3 snapshot corpus.
     ENV-GATED: needs ``uv sync --extra extract`` + ``ANTHROPIC_API_KEY`` + real tokens (see README).
-  * ``--fixtures [DIR]`` (DIR defaults to the bundled claim fixtures) — OFFLINE: a deterministic
+  * ``--fixtures [DIR]`` (DIR defaults to the bundled claim fixtures) — OFFLINE demo: a deterministic
     FakeClaimExtractor over the fixture transcripts + the REAL SqliteClaimStore (sqlite is stdlib). Runs
     anywhere on the base install; great for a demo/CI and the no-synthesis walkthrough.
+  * ``--mined-dir DIR`` — OFFLINE no-API ingestion: Claude Code (in-session) mines claims file-to-file
+    into ``{video_id}.json`` files; the FileClaimExtractor reads them over the REAL Phase-3 filesystem
+    corpus + REAL SqliteClaimStore, through the same verify/dedup/cross-reference pipeline. No SDK, no key.
 
 Output stays compact: one terse line per claim/cluster; the verbatim quote is printed only by
 ``claims show`` (the trace-back), never dumped in a listing.
@@ -95,11 +98,45 @@ def _live_plane(args: argparse.Namespace):
     return extractor, corpus, KeywordSimilarityIndex(), targets
 
 
+def _mined_plane(args: argparse.Namespace):
+    """No-API plane: REAL Phase-3 filesystem corpus + FileClaimExtractor over pre-mined JSON files.
+
+    Mirrors ``_live_plane`` minus the anthropic import and ANTHROPIC_API_KEY checks — the extraction leaf
+    reads ``{video_id}.json`` files (the ``emit_claims`` tool-input shape) that Claude Code mined in-session.
+    """
+    from .adapters import FileClaimExtractor, KeywordSimilarityIndex  # eager family: stdlib-only
+    from .adapters.corpus_fs import FilesystemCorpusStore
+
+    mined_dir = Path(args.mined_dir)
+    if not mined_dir.is_dir():
+        raise SystemExit(
+            f"--mined-dir {mined_dir} is not an existing directory. Create it and drop one "
+            f"{{video_id}}.json per video (the emit_claims tool-input shape: an object with a "
+            f"'claims' array), then re-run."
+        )
+
+    corpus = FilesystemCorpusStore(args.corpus_root)
+    corpus.init_schema()
+    extractor = FileClaimExtractor(mined_dir)
+
+    if args.video:
+        targets = [MineTarget(video_id=v, genres=[]) for v in args.video]
+    else:
+        targets = [
+            MineTarget(video_id=e.video.video_id, genres=[e.video.genre] if e.video.genre else [])
+            for e in corpus.list_entries()
+            if e.extractability.verdict.value in KEEP_VERDICTS
+        ]
+    return extractor, corpus, KeywordSimilarityIndex(), targets
+
+
 def _build_pipeline(args: argparse.Namespace):
     store = _claim_store(args.corpus_root)
     config = MiningConfig(require_citation=args.require_citation, semantic_dedup=args.semantic_dedup)
     if args.fixtures is not None:
         extractor, corpus, similarity, targets = _fixture_plane(args)
+    elif getattr(args, "mined_dir", None):
+        extractor, corpus, similarity, targets = _mined_plane(args)
     else:
         extractor, corpus, similarity, targets = _live_plane(args)
     pipeline = MiningPipeline(extractor, store, corpus, similarity=similarity, config=config)
@@ -257,10 +294,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_mine = sub.add_parser("mine", help="extract -> verify -> dedup -> cross-reference -> persist")
     _add_corpus_root(p_mine)
-    p_mine.add_argument(
+    mode = p_mine.add_mutually_exclusive_group()
+    mode.add_argument(
         "--fixtures", nargs="?", const="", default=None, metavar="DIR",
         help="run OFFLINE over the bundled claim fixtures (DIR optional). Omit this flag for the "
              "default live, env-gated mining path.",
+    )
+    mode.add_argument(
+        "--mined-dir", default=None, metavar="DIR",
+        help="run OFFLINE over pre-mined {video_id}.json claim files (the no-API path — Claude Code "
+             "mines file-to-file, this ingests through the same verify/dedup/cross-reference pipeline).",
     )
     p_mine.add_argument("--video", nargs="*", default=None, help="(live) specific video ids to mine")
     p_mine.add_argument("--model", default="claude-opus-4-8", help="(live) Claude model id")
