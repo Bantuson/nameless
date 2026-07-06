@@ -24,6 +24,8 @@ Two families, exactly as the testability law (and the Phase-2 ``workers/`` prece
 
 Phase-4 stdlib-only adapters (imported EAGERLY — pydantic + stdlib only):
       - :class:`~knowledge_pipeline.adapters.claim_extractor_fake.FakeClaimExtractor`
+      - :class:`~knowledge_pipeline.adapters.claim_extractor_file.FileClaimExtractor`  (REAL — the actual
+        no-API ingestion path over pre-mined ``{video_id}.json`` files, not a fake; json/pathlib are stdlib)
       - :class:`~knowledge_pipeline.adapters.claim_store_mem.InMemoryClaimStore`
       - :class:`~knowledge_pipeline.adapters.claim_store_sqlite.SqliteClaimStore`  (REAL — sqlite is stdlib)
       - :class:`~knowledge_pipeline.adapters.similarity_keyword.KeywordSimilarityIndex`
@@ -42,6 +44,7 @@ Phase-6 stdlib-only adapter (imported EAGERLY — pydantic + stdlib only):
 """
 
 from .claim_extractor_fake import FakeClaimExtractor
+from .claim_extractor_file import FileClaimExtractor
 from .claim_store_mem import InMemoryClaimStore
 from .claim_store_sqlite import SqliteClaimStore
 from .clock_fake import FakeClock
@@ -71,6 +74,7 @@ __all__ = [
     "NoOpRateLimiter",
     # Phase 4 — claim mining
     "FakeClaimExtractor",
+    "FileClaimExtractor",
     "InMemoryClaimStore",
     "SqliteClaimStore",
     "KeywordSimilarityIndex",
