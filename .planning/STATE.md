@@ -86,6 +86,10 @@ Recent decisions affecting current work:
 - Phase 1: heavy leaf (tokio/sqlx/sqlxmq/S3) lives behind a non-default `postgres` cargo feature; the default + `--local` build stays pure-sync-Rust and 4GB-buildable. Sync ports bridge async adapters via an owned-runtime block_on shim.
 - Phase 1: the lifecycle invariant ("cannot place unanalyzed", "AI needs the eval gate") is one exhaustive-match `transition()` + `Fragment::apply` as the sole mutator — enforced by the compiler, proven by a 480-triple matrix test.
 
+### Roadmap Evolution
+
+- Phase 11 added (2026-07-06): Artistic Unified UI — artistic-first dark single-surface app (Three.js landing centerpiece, one home surface, progressive disclosure, AI-native UX easier than FL Studio/Logic). User-directed; uses impeccable + design-taste-frontend + gsd-ui-phase skills.
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]

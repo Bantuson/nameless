@@ -201,3 +201,14 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Stem Library + Attributed Sampling | 1/1 | ✓ Complete (115 py tests) | 2026-06-28 |
 | 9. Thin Web UI | 1/1 | ✓ Complete (40 vitest) | 2026-06-28 |
 | 10. Control-Plane HTTP API | 1/1 | ✓ Complete (reviewed CLEAN; env-gated) | 2026-06-29 |
+
+### Phase 11: Artistic Unified UI — artistic-first dark single-surface app replacing the thin multi-view web UI: Three.js generative centerpiece landing, one home surface exposing all M0 functionality (capture, fragment graph, references, stem library/sampling, credits) via progressive disclosure, AI-native interface + human UX radically easier to learn than FL Studio/Logic
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 10
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 11 to break down)

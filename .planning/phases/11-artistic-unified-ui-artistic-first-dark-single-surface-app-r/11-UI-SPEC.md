@@ -1,7 +1,8 @@
 ---
 phase: 11
 slug: artistic-unified-ui-artistic-first-dark-single-surface-app-r
-status: draft
+status: approved
+reviewed_at: 2026-07-06
 shadcn_initialized: false
 preset: none
 created: 2026-07-06
@@ -233,7 +234,7 @@ Voice: calm, intimate, second person, sentence case, zero jargon, zero marketing
 |---------|---------|------|
 | Start a project | Heading / body / CTA | "Start a project" / "One project holds everything: your fragments, references, stems and credits." / "Create project" |
 | Capture sheet | Title | "Capture a fragment" |
-| Capture sheet | Record / stop / upload alt | "Start recording" / "Stop" / "or drop an audio file" |
+| Capture sheet | Record / stop / upload alt | "Start recording" / "Stop recording" / "or drop an audio file" |
 | Capture sheet | Note label + placeholder | "What is this?" + "chorus hook, sits over the second drop" |
 | Capture sheet | Submit | "Capture fragment" |
 | Capture success whisper | | "Captured. Nameless is listening." |
