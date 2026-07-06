@@ -1,25 +1,26 @@
 ---
 name: rnb-bassline
-description: "R&B bassline writing craft — finding the key, root notes, leading notes, and classic runs — load when writing or editing a bassline."
-status: promoted
+description: "R&B bassline writing craft — finding the key, root notes, leading notes, scale discipline, and classic runs — load when writing or editing a bassline."
+status: draft
 stage: bassline
 genre: rnb
-confidence: LOW
+confidence: MED
 prompt_version: file-draft-v1
 ---
 
 # Rnb · Bassline — production skill
 
-> Authored by the Nameless knowledge pipeline from 18 cited claim(s) across 1 source(s). Confidence: LOW. PROMOTED — human-audited and live to the arranger/mixer agents.
+> Authored by the Nameless knowledge pipeline from 21 cited claim(s) across 3 source(s). Confidence: MED. DRAFT — pending human spot-audit; not yet promoted to the arranger/mixer agents.
 > Every assertion below is traceable to a source quote (see Citations). Synthesized strictly over the extracted claim set — no claim, number, or technique was invented.
 
 ## Default — act on this
 
-Default approach: Before writing a bassline, find the key by playing notes on the keyboard and keeping the ones that fit, then establish the root notes for the bassline. Keep the bassline within the natural minor scale, departing only for the harmonic-minor sharp seven, and add two-five-one runs — they are synonymous with R&B.
+Default approach: Before writing a bassline, find the key by playing notes on the keyboard and keeping the ones that fit, then establish the root notes for the bassline. Keep the bassline within the natural minor scale, departing only for the harmonic-minor sharp seven — anywhere you place notes within the scale template will sound right — and add two-five-one runs — they are synonymous with R&B.
 
 - ZxlDfKabM5M @ 01:10 (clm_bcdbd18b2ebf3b76) — "quickest way to find the key of any song"
 - ZxlDfKabM5M @ 02:19 (clm_9de15903656ff047) — "establish our root notes so there's much"
 - ZxlDfKabM5M @ 10:00 (clm_0f2f1e47a3382593) — "within the natural minor scale so from"
+- wU993DNTvu4 @ 04:20 (clm_8ee3a24b07191bf4) — "see no matter where I put my notes at"
 - ZxlDfKabM5M @ 04:56 (clm_5bf9982626c7e427) — "two five ones which are synonymous with"
 
 ## Consensus — corroborated across sources
@@ -64,13 +65,19 @@ When the song calls for it, expand the bassline's range across the keyboard to g
 Fill bass runs using notes from the scale.
 - ZxlDfKabM5M @ 08:22 (clm_763ba7e218b22691) — "and we're just using the notes in the"
 
-### scale-discipline — 1 source(s) agree
-Keep the bassline within the natural minor scale, departing only for the harmonic-minor sharp seven.
+### scale-discipline — 2 source(s) agree
+Keep the bassline within the natural minor scale, departing only for the harmonic-minor sharp seven. Corroborated across distinct sources: restrict bassline writing to the highlighted scale notes of the template — anywhere you place notes within the scale template will sound right.
 - ZxlDfKabM5M @ 10:00 (clm_0f2f1e47a3382593) — "within the natural minor scale so from"
+- wU993DNTvu4 @ 01:59 (clm_bebfca70db9c3a8b) — "highlighted notes are the ones which I"
+- wU993DNTvu4 @ 04:20 (clm_8ee3a24b07191bf4) — "see no matter where I put my notes at"
 
 ### scale-learning — 1 source(s) agree
 Learn your scales starting with the natural minor and major scales — they unlock basslines, melodies, and chord progressions.
 - ZxlDfKabM5M @ 10:29 (clm_f8034183c1f6384a) — "can start with your natural minor and"
+
+### bass-variation — 1 source(s) agree
+Bring in a live bass for the B section as a pivot.
+- R1hgtWWpyoo @ 09:25 (clm_387efc02e5162df8) — "I think a live bass for the B section"
 
 ## Contested — both camps preserved
 
@@ -81,6 +88,7 @@ _No contested topics in this cell._
 - `clm_bcdbd18b2ebf3b76`  ZxlDfKabM5M @ 01:10  "quickest way to find the key of any song"
 - `clm_9de15903656ff047`  ZxlDfKabM5M @ 02:19  "establish our root notes so there's much"
 - `clm_0f2f1e47a3382593`  ZxlDfKabM5M @ 10:00  "within the natural minor scale so from"
+- `clm_8ee3a24b07191bf4`  wU993DNTvu4 @ 04:20  "see no matter where I put my notes at"
 - `clm_5bf9982626c7e427`  ZxlDfKabM5M @ 04:56  "two five ones which are synonymous with"
 - `clm_1f5458206b811e69`  ZxlDfKabM5M @ 01:59  "so let's play the relative minor of d"
 - `clm_5cd3da4023fa57ad`  ZxlDfKabM5M @ 03:11  "often being the lowest note has such an"
@@ -95,4 +103,6 @@ _No contested topics in this cell._
 - `clm_7cd0d736cd47e70c`  ZxlDfKabM5M @ 07:49  "is the root the fifth of that root"
 - `clm_153c52d7a47a6a6e`  ZxlDfKabM5M @ 06:56  "expanding its range across the keyboard"
 - `clm_763ba7e218b22691`  ZxlDfKabM5M @ 08:22  "and we're just using the notes in the"
+- `clm_bebfca70db9c3a8b`  wU993DNTvu4 @ 01:59  "highlighted notes are the ones which I"
 - `clm_f8034183c1f6384a`  ZxlDfKabM5M @ 10:29  "can start with your natural minor and"
+- `clm_387efc02e5162df8`  R1hgtWWpyoo @ 09:25  "I think a live bass for the B section"
