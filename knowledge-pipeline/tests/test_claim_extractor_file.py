@@ -14,18 +14,23 @@ Three layers, all offline (fakes/tmpdir/sqlite only — no network, no anthropic
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 
 import pytest
 
 from knowledge_pipeline.adapters import (
     FakeClock,
+    FilesystemCorpusStore,
     InMemoryClaimStore,
     InMemoryCorpusStore,
     KeywordSimilarityIndex,
 )
 from knowledge_pipeline.adapters.claim_extractor_file import FileClaimExtractor
+from knowledge_pipeline.claims_cli import KEEP_VERDICTS, main
+from knowledge_pipeline.domain.models import CaptionSource, CorpusEntry, Verdict, VideoRef
 from knowledge_pipeline.mining_pipeline import MineTarget, MiningPipeline
+from knowledge_pipeline.pure.extractability import extractability_score
 from knowledge_pipeline.pure.extraction_schema import parse_extractor_output
 from knowledge_pipeline.pure.snapshot import snapshot_record
 
@@ -198,3 +203,138 @@ def test_pipeline_judges_file_claims_like_api_claims_and_skips_missing_files(tmp
     persisted = store.list_claims(source_video_id="vid1")
     assert len(persisted) == 1
     assert persisted[0].quote == LOG_DRUM_LINE
+
+
+# ---------------------------------------------------------------------------------------------
+# CLI e2e — `claims mine --mined-dir` over the REAL FilesystemCorpusStore + REAL SqliteClaimStore
+# (no anthropic SDK, no ANTHROPIC_API_KEY — the whole point of the plane)
+# ---------------------------------------------------------------------------------------------
+
+NOW = _dt.datetime(2026, 7, 6, tzinfo=_dt.timezone.utc)
+
+RICH_LINE_1 = "high pass the log drum around 40 hz and sidechain the bass to the kick"
+RICH_LINE_2 = "sidechain the bass to the kick around 4 db and cut the sub below 30 hz"
+
+
+def _run(argv, capsys):
+    rc = main(argv)
+    return rc, capsys.readouterr().out
+
+
+def _register_video(corpus, video_id: str, segments, *, genre="amapiano", caption="manual"):
+    """Snapshot + register one video in the REAL corpus (the test_corpus_store entry-builder pattern)."""
+    t = make_transcript(video_id=video_id, caption_source=CaptionSource(caption), segments=segments)
+    rec = snapshot_record(t, NOW)
+    extr = extractability_score(t)
+    vid = VideoRef(video_id=video_id, title=f"title {video_id}", genre=genre, query_origin="q")
+    entry = CorpusEntry(video=vid, snapshot=rec, extractability=extr, ingested_at=NOW)
+    corpus.write_snapshot(t, rec)
+    corpus.register(entry)
+    return entry
+
+
+@pytest.fixture
+def cli_plane(tmp_path, monkeypatch):
+    """A REAL corpus root (2 keep-verdict snapshots) + a mined dir with matching claim files.
+
+    ANTHROPIC_API_KEY is deleted for the duration: the mined plane must never need it.
+    Returns ``(corpus_root, mined_dir)``.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    root = tmp_path / "corpus"
+    mined = tmp_path / "mined"
+    mined.mkdir()
+
+    corpus = FilesystemCorpusStore(root)
+    corpus.init_schema()
+    e1 = _register_video(corpus, "vid1", [(8.0, 6.0, RICH_LINE_1)], genre="amapiano")
+    e2 = _register_video(corpus, "vid2", [(3.0, 6.0, RICH_LINE_2)], genre="deep-house")
+    # precondition: both entries would be selected by the default KEEP_VERDICTS filter
+    assert e1.extractability.verdict.value in KEEP_VERDICTS
+    assert e2.extractability.verdict.value in KEEP_VERDICTS
+    corpus.close()
+
+    _write_mined(mined, "vid1", [_claim_entry(quote=RICH_LINE_1, timestamp_ms=8000)])
+    _write_mined(
+        mined,
+        "vid2",
+        [_claim_entry(quote=RICH_LINE_2, timestamp_ms=3000, technique="sidechain", stage="mixing")],
+    )
+    return str(root), mined
+
+
+def test_mined_dir_e2e_real_stores_no_api_key(cli_plane, capsys):
+    root, mined = cli_plane
+
+    rc, out = _run(["--json", "mine", "--mined-dir", str(mined), "--corpus-root", root], capsys)
+    assert rc == 0
+    report = json.loads(out)
+    outcomes = {o["video_id"]: o for o in report["outcomes"]}
+    assert set(outcomes) == {"vid1", "vid2"}
+    for vid in ("vid1", "vid2"):
+        assert outcomes[vid]["citations_ok"] > 0    # verify_citation genuinely ran and passed
+        assert outcomes[vid]["kept"] > 0
+
+    # persisted in the REAL SqliteClaimStore under the same corpus root
+    rc, out = _run(["--json", "stats", "--corpus-root", root], capsys)
+    assert rc == 0
+    stats = json.loads(out)
+    assert stats["total_claims"] >= 2
+    assert stats["citation_verified"] >= 2
+
+
+def test_mined_dir_missing_file_skips_that_video_and_persists_the_rest(cli_plane, capsys):
+    root, mined = cli_plane
+    (mined / "vid2.json").unlink()  # vid2 has no mined file
+
+    rc, out = _run(["mine", "--mined-dir", str(mined), "--corpus-root", root], capsys)
+    assert rc == 0
+    assert "extract error" in out
+    assert "vid2" in out
+
+    rc, out = _run(["--json", "stats", "--corpus-root", root], capsys)
+    assert rc == 0
+    assert json.loads(out)["total_claims"] >= 1     # vid1's claims still landed
+
+
+def test_default_targets_come_from_keep_verdicts_only(cli_plane, capsys, tmp_path):
+    root, mined = cli_plane
+    # register a REJECT-verdict entry — the default target selection must never mine it
+    corpus = FilesystemCorpusStore(root)
+    reject = _register_video(
+        corpus,
+        "vidreject",
+        [(0.0, 8.0, "yeah man this vibe is so clean i love it"), (60.0, 8.0, "shout out everyone")],
+        caption="none",
+    )
+    assert reject.extractability.verdict is Verdict.REJECT  # precondition
+    corpus.close()
+
+    rc, out = _run(["--json", "mine", "--mined-dir", str(mined), "--corpus-root", root], capsys)
+    assert rc == 0
+    mined_ids = {o["video_id"] for o in json.loads(out)["outcomes"]}
+    assert "vidreject" not in mined_ids
+    assert mined_ids == {"vid1", "vid2"}
+
+
+def test_video_flag_restricts_mining_to_that_video(cli_plane, capsys):
+    root, mined = cli_plane
+    rc, out = _run(
+        ["--json", "mine", "--mined-dir", str(mined), "--corpus-root", root, "--video", "vid1"],
+        capsys,
+    )
+    assert rc == 0
+    assert {o["video_id"] for o in json.loads(out)["outcomes"]} == {"vid1"}
+
+
+def test_fixtures_and_mined_dir_are_mutually_exclusive(tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["mine", "--fixtures", "--mined-dir", str(tmp_path)])
+    assert exc_info.value.code == 2                 # argparse's usage error
+
+
+def test_nonexistent_mined_dir_exits_naming_the_directory(tmp_path):
+    missing = tmp_path / "no-such-mined-dir"
+    with pytest.raises(SystemExit) as exc_info:
+        main(["mine", "--mined-dir", str(missing), "--corpus-root", str(tmp_path / "corpus")])
+    assert str(missing) in str(exc_info.value)
