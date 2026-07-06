@@ -245,3 +245,230 @@ def test_cell_scoped_claim_store_keeps_the_gate_claim_index_complete(fixture_lay
     assert set(select_cells(view.list_clusters())) == set(available)
     # everything else delegates to the inner store
     assert view.stats() == claim_store.stats()
+
+
+# ---------------------------------------------------------------------------------------------
+# CLI e2e — `skills synthesize --drafts-dir` over the REAL FilesystemCorpusStore + REAL
+# SqliteClaimStore + REAL FilesystemSkillStore (no anthropic SDK, no ANTHROPIC_API_KEY — the point)
+# ---------------------------------------------------------------------------------------------
+
+from knowledge_pipeline.adapters import (  # noqa: E402
+    FakeClaimExtractor,
+    FilesystemCorpusStore,
+    KeywordSimilarityIndex,
+    SqliteClaimStore,
+)
+from knowledge_pipeline.claim_fixtures import load_claim_fixtures  # noqa: E402
+from knowledge_pipeline.mining_pipeline import MineTarget, MiningPipeline  # noqa: E402
+from knowledge_pipeline.pure.snapshot import snapshot_record  # noqa: E402
+from knowledge_pipeline.skills_cli import main  # noqa: E402
+
+from .conftest import FIXED_NOW  # noqa: E402
+
+
+def _real_claim_layer(tmp_path):
+    """Mirror ``_fixture_plane`` but with REAL persistence: fs corpus snapshots + sqlite claim layer."""
+    corpus_root = tmp_path / "corpus"
+    corpus = FilesystemCorpusStore(corpus_root)
+    corpus.init_schema()
+    claim_corpus = load_claim_fixtures()
+    for _vid, transcript in claim_corpus.transcripts.items():
+        corpus.write_snapshot(transcript, snapshot_record(transcript, FIXED_NOW))
+    claim_store = SqliteClaimStore(corpus_root / "registry.sqlite")
+    claim_store.init_schema()
+    MiningPipeline(
+        FakeClaimExtractor(scripted=claim_corpus.scripted),
+        claim_store,
+        corpus,
+        similarity=KeywordSimilarityIndex(),
+    ).mine(
+        [MineTarget(video_id=v, genres=claim_corpus.genres.get(v, [])) for v in claim_corpus.video_ids]
+    )
+    clusters = claim_store.list_clusters()
+    cells = select_cells(clusters)
+    claim_store.close()
+    corpus.close()
+    return corpus_root, clusters, cells
+
+
+def _write_all_drafts(drafts_dir, clusters, cells, *, skip_slug=None, poison_slug=None):
+    """One template-derived emit_skill payload per selected cell (optionally skipping/poisoning one)."""
+    for cell in cells:
+        if cell.slug == skip_slug:
+            continue
+        payload = _draft_to_payload(template_synthesize(cell, clusters_for_cell(clusters, cell)))
+        if cell.slug == poison_slug:
+            payload["default"]["body"] += " Boost 999 Hz heavily."
+        (drafts_dir / draft_filename(cell)).write_text(json.dumps(payload), encoding="utf-8")
+
+
+@pytest.fixture
+def drafts_plane(tmp_path, monkeypatch):
+    """A REAL corpus root + sqlite claim layer + an empty drafts dir + a skills root, no API key set.
+
+    Returns ``(corpus_root, drafts_dir, skills_root, clusters, cells)``.
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    corpus_root, clusters, cells = _real_claim_layer(tmp_path)
+    drafts_dir = tmp_path / "drafts"
+    drafts_dir.mkdir()
+    skills_root = tmp_path / "skills-root"
+    skills_root.mkdir()
+    return corpus_root, drafts_dir, skills_root, clusters, cells
+
+
+def _synth_argv(drafts_dir, corpus_root, skills_root, *, as_json=False):
+    argv = [
+        "synthesize", "--drafts-dir", str(drafts_dir),
+        "--corpus-root", str(corpus_root), "--skills-root", str(skills_root),
+    ]
+    return (["--json"] + argv) if as_json else argv
+
+
+def _run(argv, capsys):
+    rc = main(argv)
+    captured = capsys.readouterr()
+    return rc, captured.out, captured.err
+
+
+def test_drafts_dir_e2e_real_stores_no_api_key(drafts_plane, capsys):
+    corpus_root, drafts_dir, skills_root, clusters, cells = drafts_plane
+    _write_all_drafts(drafts_dir, clusters, cells)
+
+    rc, out, _err = _run(_synth_argv(drafts_dir, corpus_root, skills_root), capsys)
+    assert rc == 0
+    assert "authored=5" in out
+    assert "rejected=0" in out
+    # the real SKILL.md files landed on disk
+    assert (skills_root / "skills/production/vocal-layering/rnb/SKILL.md").exists()
+    assert (skills_root / "skills/production/drums/amapiano/SKILL.md").exists()
+
+    # persisted in the REAL registry sqlite under the same corpus root
+    rc, out, _err = _run(
+        ["stats", "--corpus-root", str(corpus_root), "--skills-root", str(skills_root)], capsys
+    )
+    assert rc == 0
+    assert "total_skills:   5" in out
+    assert "draft: 5" in out
+
+
+def test_missing_file_cell_is_skipped_with_a_clear_stderr_line(drafts_plane, capsys):
+    corpus_root, drafts_dir, skills_root, clusters, cells = drafts_plane
+    skipped = cells[-1]
+    _write_all_drafts(drafts_dir, clusters, cells, skip_slug=skipped.slug)
+
+    rc, out, err = _run(_synth_argv(drafts_dir, corpus_root, skills_root), capsys)
+    assert rc == 0
+    assert "authored=4" in out
+    # the SKIP line names the cell slug AND its expected {stage}__{genre}.json filename
+    assert f"SKIP {skipped.slug}" in err
+    assert draft_filename(skipped) in err
+    # the skipped cell's SKILL.md does NOT exist; the other four do
+    assert not (skills_root / skipped.relpath).exists()
+    for cell in cells:
+        if cell != skipped:
+            assert (skills_root / cell.relpath).exists()
+
+
+def test_skip_does_not_perturb_survivors(drafts_plane, capsys, tmp_path):
+    # scoping is output-invariant: the four skills authored in the skip run must be byte-identical
+    # (body_sha256) to the same cells in the all-files run.
+    corpus_root, drafts_dir, skills_root, clusters, cells = drafts_plane
+    skipped = cells[-1]
+
+    _write_all_drafts(drafts_dir, clusters, cells)
+    rc, _out, _err = _run(_synth_argv(drafts_dir, corpus_root, skills_root), capsys)
+    assert rc == 0
+    rc, out, _err = _run(
+        ["--json", "list", "--corpus-root", str(corpus_root), "--skills-root", str(skills_root)], capsys
+    )
+    all_run = {(s["stage"], s["genre"]): s["body_sha256"] for s in json.loads(out)}
+
+    skip_root = tmp_path / "skills-root-skip"
+    skip_root.mkdir()
+    skip_drafts = tmp_path / "drafts-skip"
+    skip_drafts.mkdir()
+    _write_all_drafts(skip_drafts, clusters, cells, skip_slug=skipped.slug)
+    rc, _out, _err = _run(_synth_argv(skip_drafts, corpus_root, skip_root), capsys)
+    assert rc == 0
+    rc, out, _err = _run(
+        ["--json", "list", "--corpus-root", str(corpus_root), "--skills-root", str(skip_root)], capsys
+    )
+    skip_run = {(s["stage"], s["genre"]): s["body_sha256"] for s in json.loads(out)}
+
+    for cell in cells:
+        if cell != skipped:
+            assert skip_run[(cell.stage, cell.genre)] == all_run[(cell.stage, cell.genre)]
+
+
+def test_gate_rejects_a_poisoned_file_draft_in_the_report(drafts_plane, capsys):
+    # The file plane gets no special pass: a parseable draft asserting an invented parameter value is
+    # REJECTED by the unchanged gate and shows in the report with an invented_number reason.
+    corpus_root, drafts_dir, skills_root, clusters, cells = drafts_plane
+    poisoned = cells[0]
+    _write_all_drafts(drafts_dir, clusters, cells, poison_slug=poisoned.slug)
+
+    rc, out, _err = _run(_synth_argv(drafts_dir, corpus_root, skills_root), capsys)
+    assert rc == 0
+    assert "authored=4" in out
+    assert "rejected=1" in out
+    assert "REJECTED" in out
+    assert "invented_number" in out
+    assert not (skills_root / poisoned.relpath).exists()
+    for cell in cells:
+        if cell != poisoned:
+            assert (skills_root / cell.relpath).exists()
+
+
+def test_malformed_json_draft_exits_loudly_naming_the_file(drafts_plane, capsys):
+    corpus_root, drafts_dir, skills_root, clusters, cells = drafts_plane
+    _write_all_drafts(drafts_dir, clusters, cells)
+    bad = drafts_dir / draft_filename(cells[0])
+    bad.write_text("{not valid json!!", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(_synth_argv(drafts_dir, corpus_root, skills_root))
+    assert str(bad) in str(exc_info.value)
+
+
+def test_fixtures_and_drafts_dir_are_mutually_exclusive(tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["synthesize", "--fixtures", "--drafts-dir", str(tmp_path)])
+    assert exc_info.value.code == 2                 # argparse's usage error
+
+
+def test_nonexistent_drafts_dir_exits_naming_the_directory(tmp_path):
+    missing = tmp_path / "no-such-drafts-dir"
+    with pytest.raises(SystemExit) as exc_info:
+        main([
+            "synthesize", "--drafts-dir", str(missing),
+            "--corpus-root", str(tmp_path / "corpus"), "--skills-root", str(tmp_path),
+        ])
+    msg = str(exc_info.value)
+    assert str(missing) in msg
+    assert ".json" in msg  # says what belongs there
+
+
+def test_unused_draft_file_warns_on_stderr_and_the_run_authors_normally(drafts_plane, capsys):
+    corpus_root, drafts_dir, skills_root, clusters, cells = drafts_plane
+    _write_all_drafts(drafts_dir, clusters, cells)
+    (drafts_dir / "bogus__nowhere.json").write_text("{}", encoding="utf-8")
+
+    rc, out, err = _run(_synth_argv(drafts_dir, corpus_root, skills_root), capsys)
+    assert rc == 0
+    assert "authored=5" in out
+    assert "WARNING" in err
+    assert "bogus__nowhere.json" in err
+
+
+def test_json_stdout_stays_parseable_with_a_skip(drafts_plane, capsys):
+    # skip/unused lines go to stderr, so `--json` stdout remains a machine-parseable report
+    corpus_root, drafts_dir, skills_root, clusters, cells = drafts_plane
+    skipped = cells[-1]
+    _write_all_drafts(drafts_dir, clusters, cells, skip_slug=skipped.slug)
+
+    rc, out, err = _run(_synth_argv(drafts_dir, corpus_root, skills_root, as_json=True), capsys)
+    assert rc == 0
+    report = json.loads(out)                        # valid JSON — nothing leaked into stdout
+    assert report["authored"] == 4
+    assert f"SKIP {skipped.slug}" in err
