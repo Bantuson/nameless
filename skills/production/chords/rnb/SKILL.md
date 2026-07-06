@@ -1,7 +1,7 @@
 ---
 name: rnb-chords
 description: "R&B chord craft — extensions, borrowed chords, Dorian color, and reusable progressions — load when writing chords or keys for a track."
-status: draft
+status: promoted
 stage: chords
 genre: rnb
 confidence: LOW
@@ -10,7 +10,7 @@ prompt_version: file-draft-v1
 
 # Rnb · Chords — production skill
 
-> Authored by the Nameless knowledge pipeline from 12 cited claim(s) across 1 source(s). Confidence: LOW. DRAFT — pending human spot-audit; not yet promoted to the arranger/mixer agents.
+> Authored by the Nameless knowledge pipeline from 12 cited claim(s) across 1 source(s). Confidence: LOW. PROMOTED — human-audited and live to the arranger/mixer agents.
 > Every assertion below is traceable to a source quote (see Citations). Synthesized strictly over the extracted claim set — no claim, number, or technique was invented.
 
 ## Default — act on this

@@ -1,7 +1,7 @@
 ---
 name: rnb-mixing
 description: "Balance-first R&B mixing craft with a full lead-vocal chain from cleanup to space — load when mixing a track or processing vocals in an R&B song."
-status: draft
+status: promoted
 stage: mixing
 genre: rnb
 confidence: LOW
@@ -10,7 +10,7 @@ prompt_version: file-draft-v1
 
 # Rnb · Mixing — production skill
 
-> Authored by the Nameless knowledge pipeline from 26 cited claim(s) across 2 source(s). Confidence: LOW. DRAFT — pending human spot-audit; not yet promoted to the arranger/mixer agents.
+> Authored by the Nameless knowledge pipeline from 26 cited claim(s) across 2 source(s). Confidence: LOW. PROMOTED — human-audited and live to the arranger/mixer agents.
 > Every assertion below is traceable to a source quote (see Citations). Synthesized strictly over the extracted claim set — no claim, number, or technique was invented.
 
 ## Default — act on this
