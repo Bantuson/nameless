@@ -204,11 +204,16 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ### Phase 11: Artistic Unified UI — artistic-first dark single-surface app replacing the thin multi-view web UI: Three.js generative centerpiece landing, one home surface exposing all M0 functionality (capture, fragment graph, references, stem library/sampling, credits) via progressive disclosure, AI-native interface + human UX radically easier to learn than FL Studio/Logic
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** A producer lands on a living Three.js Night Bloom scene, enters ONE dark home surface, and does the whole M0 loop — capture with intent, watch the fragment constellation understand it, upload references for vibe, sample stems with honest attribution, read credits — through progressive-disclosure layers over the existing `NamelessApi` seam, with zero routed pages and an interface that feels like Sonder sounds.
+**Requirements**: UI-01, UI-02, UI-03, UI-04 (the Phase 9 functional floor, re-delivered through the artistic single surface per 11-CONTEXT.md + the approved 11-UI-SPEC.md)
 **Depends on:** Phase 10
-**Plans:** 0 plans
+**Plans:** 6 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 11 to break down)
+- [ ] 11-01-PLAN.md — Foundation: package legitimacy gate + deps, full UI-SPEC token system + binding copy deck, two-state shell (landing | home), dock, switcher, Start-a-project, wave-2 seams (wave 1)
+- [ ] 11-02-PLAN.md — Overlay system (Drawer/Sheet/Veil + focus trap), status whispers, Recorder port + Capture sheet [UI-01] (wave 2)
+- [ ] 11-03-PLAN.md — Night Bloom: lazy R3F particle nebula per the scene contract, WebGL probe, designed fallback, bundle split (wave 2)
+- [ ] 11-04-PLAN.md — Fragment constellation + List alternative + polling whispers, Fragment veil, Credits veil [UI-04] (wave 3)
+- [ ] 11-05-PLAN.md — Reference drawer (vibe-first summary, attach roles), Stem drawer + attribution form with designed 422 state [UI-02, UI-03] (wave 3)
+- [ ] 11-06-PLAN.md — Motion/a11y/anti-slop audit sweep, keyboard-only core-loop proof, phase gate + end-of-phase human check (wave 4)
